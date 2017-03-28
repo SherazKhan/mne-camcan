@@ -1,18 +1,33 @@
-import mne
-import subprocess
 import os.path as op
+from nipype.interfaces.freesurfer import ReconAll
+from mne.parallel import parallel_func
 
-recon_dir = '/autofs/cluster/fusion/Sheraz/camcan/recons'
+
+subjects_dir = '/cluster/fusion/Sheraz/camcan/recons'
 camcan_path = '/cluster/transcend/MEG'
-subj = 'CC110037'
 
-COMMAND = ['setenv', 'SUBJECTS_DIR', recon_dir, 'recon-all', '-all', '-s', subj, '-i',
-           op.joins(camcan_path, '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-'+subj,
-                    'anat','sub'+subj+'_T1w.nii.gz')]
+subjects = ['CC110033', 'CC110037', 'CC110045']
+N_JOBS = 3
 
 
-p = subprocess.Popen(COMMAND,
-                     shell=False,
-                     stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE)
-(output, err) = p.communicate()
+def process_subject_anatomy(subject):
+
+    t1_fname = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + subject,
+             'anat', 'sub-' + subject + '_T1w.nii.gz')
+
+    t2_fname = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + subject,
+             'anat', 'sub-' + subject + '_T2w.nii.gz')
+
+    reconall = ReconAll()
+    reconall.inputs.subject_id = subject
+    reconall.inputs.directive = 'all'
+    reconall.inputs.subjects_dir = subjects_dir
+    reconall.inputs.T1_files = t1_fname
+    reconall.inputs.T1_files = t2_fname
+    reconall.run()
+
+parallel, run_func, _ = parallel_func(process_subject_anatomy, n_jobs=N_JOBS)
+parallel(run_func(subject) for subject in subjects)
+
+
+
