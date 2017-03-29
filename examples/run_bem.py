@@ -4,12 +4,14 @@ import os.path as op
 
 subjects_dir = '/cluster/fusion/Sheraz/camcan/recons'
 
+mne.set_config('SUBJECTS_DIR',subjects_dir)
 
 subjects = ['CC110033', 'CC110037', 'CC110045']
 N_JOBS = 3
 
 def process_subject_bem(subject, spacing='ico5'):
-    mne.bem.make_watershed_bem(subject=subject, subjects_dir=subjects_dir)
+    mne.bem.make_watershed_bem(subject=subject, subjects_dir=subjects_dir, overwrite=True, volume='T1', atlas=True,
+                       gcaatlas=False, preflood=None)
     conductivity = (0.3,)
     model = mne.make_bem_model(subject=subject, ico=4,
                                conductivity=conductivity,
@@ -21,8 +23,9 @@ def process_subject_bem(subject, spacing='ico5'):
     bem_fname = op.join(subjects_dir,subject,'bem', '%s-src.fif' % subject)
     src_fname = op.join(subjects_dir, subject, 'bem', '%s-src.fif' % spacing)
     mne.write_bem_solution(bem_fname, bem=bem)
-    mne.write_source_spaces(src_fname, src=src)
+    mne.write_source_spaces(src_fname, src=src, overwrite=True)
 
 
 parallel, run_func, _ = parallel_func(process_subject_bem, n_jobs=N_JOBS)
 parallel(run_func(subject) for subject in subjects)
+
