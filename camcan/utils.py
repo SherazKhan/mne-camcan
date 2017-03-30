@@ -430,11 +430,11 @@ def csv2dict(csv_fname):
     return result
 
 
-def labels2stc(labels, labels_data, stc):
+def labels2stc(labels,labels_data,stc):
     stc_new = stc.copy()
     stc_new.data.fill(0)
-    for index, label in enumerate(labels):
-        if labels_data.ndim == 1:
+    for index,label in enumerate(labels):
+        if labels_data.ndim==1:
             temp = stc.in_label(mne.read_label(label))
             temp.data.fill(labels_data[index])
             stc_new += temp.expand(stc.vertices)
@@ -442,9 +442,22 @@ def labels2stc(labels, labels_data, stc):
             lab = mne.read_label(label)
             ver = np.intersect1d(lab.vertices, stc.vertices)
             if '-rh' in label:
-                ver = ver + len(stc.vertices[0])
-            stc_data = np.tile(labels_data[index, :][:, np.newaxis], len(ver)).T
+                ver=ver+len(stc.vertices[0])
+            stc_data = np.tile(labels_data[index,:][:,np.newaxis],len(ver)).T
             stc_new.data[ver, :] = stc_data
+    return stc_new
+
+
+def get_stc(labels,data,tmin=0,tstep=1):
+    stc_vertices = [np.uint32(np.arange(10242)), np.uint32(np.arange(10242))]
+
+    if data.ndim==1:
+        stc_data = np.ones((20484,1), dtype=np.float32)
+    else:
+        stc_data = np.ones((20484, data.shape[1]), dtype=np.float32)
+
+    stc = mne.SourceEstimate(stc_data, vertices=stc_vertices, tmin=tmin, tstep=tstep, subject='fsaverage')
+    stc_new = labels2stc(labels, data, stc)
     return stc_new
 
 

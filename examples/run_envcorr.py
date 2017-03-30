@@ -6,7 +6,8 @@ from mne.preprocessing import compute_proj_ecg, compute_proj_eog
 import glob
 import numpy as np
 from scipy.signal import hilbert
-
+from camcan.utils import get_stc
+import bct
 
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
@@ -16,9 +17,9 @@ subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
-labels  = glob.glob(op.join(data_path, 'labels', '*.label'))
+labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
 labels = [mne.read_label(label, subject='fsaverageSK', color='r')
-          for label in labels]
+          for label in labels_fname]
 for index, label in enumerate(labels):
     label.values.fill(1.0)
     labels[index] = label
@@ -93,11 +94,12 @@ for index, label in enumerate(labels):
     data = flip[:, np.newaxis] * data
     data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
     labels_data[index] = data
+    print(float(index) / len(labels) * 100)
 
 labels_data = hilbert(labels_data, axis=1)
 corr_mats = np.zeros((len(labels),len(labels), n_epochs))
 
-for index, label_data in labels_data:
+for index, label_data in enumerate(labels_data):
     label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
     label_data_orig = np.abs(label_data)
     label_data_cont = np.transpose(np.dstack((label_data_orig,
@@ -105,7 +107,17 @@ for index, label_data in labels_data:
     corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
     print(float(index)/len(labels)*100)
 
+corr_mats = np.transpose(corr_mats,(2,0,1))
 
+corr = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
+                        for corr_mat in corr_mats]),axis=0)
 
+corr = np.int32(bct.utils.threshold_proportional(corr,.15) > 0)
+deg = bct.density_und(corr)
 
+stc = get_stc(labels_fname, deg)
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir)
 
+brain.save_image('beta_orthogonal_corr.png')
