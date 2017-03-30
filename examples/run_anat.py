@@ -23,7 +23,7 @@ def process_subject_anatomy(subject):
     reconall.inputs.directive = 'all'
     reconall.inputs.subjects_dir = subjects_dir
     reconall.inputs.T1_files = t1_fname
-    reconall.inputs.T1_files = t2_fname
+    reconall.inputs.T2_files = t2_fname
     reconall.run()
 
 parallel, run_func, _ = parallel_func(process_subject_anatomy, n_jobs=N_JOBS)
