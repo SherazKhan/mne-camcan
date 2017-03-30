@@ -1,11 +1,12 @@
 import mne
 import os.path as op
-from autoreject import Ransac  # noqa
 import matplotlib.pyplot as plt
 from camcan.library.config import ctc, cal
 from mne.preprocessing import compute_proj_ecg, compute_proj_eog
-from mne.label import Label, _blend_colors, label_sign_flip
 import glob
+import numpy as np
+from scipy.signal import hilbert
+
 
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
@@ -25,7 +26,7 @@ for index, label in enumerate(labels):
 labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
-event_overlap = 4
+event_overlap = 8
 event_length = 30
 spacing='ico5'
 
@@ -57,14 +58,14 @@ raw.filter(None, 40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
 
 cov = mne.compute_raw_covariance(raw, tmin=0, tmax=None)
 
-raw.filter(2, None, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 
-reject = dict(grad=4000e-13, mag=4e-12)
+reject = dict(grad=1000e-13, mag=1.2e-12)
 events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
 epochs = mne.Epochs(raw, events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-epochs.resample(150.)
+epochs.resample(100.)
 
 bem_fname = op.join(bem_dir, '%s-src.fif' % subject)
 src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
@@ -78,8 +79,33 @@ inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth
 snr = 1.0  # use lower SNR for single epochs
 lambda2 = 1.0 / snr ** 2
 method = "MNE"
-stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method,
-                            pick_ori="normal", return_generator=False)
+n_epochs, n_chs, n_time = epochs._data.shape
+
+labels_data = np.zeros((len(labels), n_time, n_epochs))
+
+for index, label in enumerate(labels):
+    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, label, pick_ori="normal")
+    data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
+    n_verts, n_time, n_epochs = data.shape
+    data = data.reshape(n_verts, n_time * n_epochs)
+    U, S, V = np.linalg.svd(data, full_matrices=False)
+    flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
+    data = flip[:, np.newaxis] * data
+    data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
+    labels_data[index] = data
+
+labels_data = hilbert(labels_data, axis=1)
+corr_mats = np.zeros((len(labels),len(labels), n_epochs))
+
+for index, label_data in labels_data:
+    label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
+    label_data_orig = np.abs(label_data)
+    label_data_cont = np.transpose(np.dstack((label_data_orig,
+                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
+    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
+    print(float(index)/len(labels)*100)
+
+
 
 
 

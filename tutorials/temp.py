@@ -97,3 +97,65 @@ ind_good = np.delete(ind_all,ind_nmr)
 9|import| |glob
 15|#labels = [os.path.basename(label) for label in |glob|.glob('/cluster/transcend/sheraz/NC_rev/labels/*.label')]
 15|#labels = [os.path.basename(label) for label in glob.|glob|('/cluster/transcend/sheraz/NC_rev/labels/*.label')]
+
+% %
+function
+corr = hippcorr_f(x, cfg, band)
+
+nTime = size(x, 2);
+nEpoch = size(x, 3);
+nROI = size(x, 1);
+corr = cell(1);
+
+for i=1:length(band)
+x1 = eegfilt(double(x), cfg.fs, band
+{i}.hp, band
+{i}.lp, nTime);
+
+
+x1 = reshape(x1, nROI, nTime, nEpoch);
+
+y1 = zeros(nROI, nTime, nEpoch);
+
+for j=1:nEpoch
+y1(:,:, j)=hilbert(x1(:,:, j)')';
+end
+
+co = zeros(nROI, nROI, nEpoch);
+fs = cfg.fs;
+
+load('/autofs/cluster/transcend/sheraz/scripts/filtwts.mat');
+
+for ii = 1:nROI
+y_orth = (imag((permute(repmat(squeeze(y1(ii,:,:)), [1 1 nROI]), [3 1 2])).*(conj(y1). / abs(y1))));
+y_orig = abs(y1(ii,:,:));
+y = cat(1, y_orig, y_orth);
+
+times = 0:1 / 256:30;
+[y, times] = compute_resample_empty(y, times);
+nTime1 = size(y, 2);
+
+y = permute(reshape(filtfilt(filtwts, 1, reshape(permute(y, [2 1 3]), nTime1, (nROI + 1) * nEpoch)), nTime1, (nROI + 1),
+                    nEpoch), [2 1 3]);
+
+co_temp = zeros(nROI + 1, nROI + 1, nEpoch);
+for jj = 1:nEpoch
+
+co_temp(:,:, jj)=corrcoef((y(:, 7:end - 7, jj))');
+end
+
+co(ii,:,:)=squeeze(co_temp(1, 2:end,:));
+
+end
+
+corr
+{i}.co = co;
+
+corr
+{i}.hp = band
+{i}.hp;
+corr
+{i}.lp = band
+{i}.lp;
+
+end
