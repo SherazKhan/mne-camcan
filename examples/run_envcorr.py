@@ -16,7 +16,13 @@ subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
 labels  = glob.glob(op.join(data_path, 'labels', '*.label'))
+labels = [mne.read_label(label, subject='fsaverageSK', color='r')
+          for label in labels]
+for index, label in enumerate(labels):
+    label.values.fill(1.0)
+    labels[index] = label
 
+labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
 event_overlap = 4
@@ -68,6 +74,12 @@ src = mne.read_source_spaces(src_fname)
 
 fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem,fname=None, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth=0.8)
+
+snr = 1.0  # use lower SNR for single epochs
+lambda2 = 1.0 / snr ** 2
+method = "MNE"
+stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method,
+                            pick_ori="normal", return_generator=False)
 
 
 
