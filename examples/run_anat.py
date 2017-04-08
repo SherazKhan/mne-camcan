@@ -10,11 +10,10 @@ camcan_path = '/cluster/transcend/MEG'
 N_JOBS = 72
 t1_files = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + '*',
              'anat', 'sub-' + '*' + '_T1w.nii.gz')
-t2_files = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + '*',
-             'anat', 'sub-' + '*' + '_T2w.nii.gz')
+
 
 t1_files = glob.glob(t1_files)
-t2_files = glob.glob(t2_files)
+
 
 
 def process_subject_anatomy(t1):

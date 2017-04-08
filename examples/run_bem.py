@@ -1,13 +1,24 @@
 import mne
 from mne.parallel import parallel_func
 import os.path as op
+import glob
 
 subjects_dir = '/cluster/fusion/Sheraz/camcan/recons'
+camcan_path = '/cluster/transcend/MEG'
 
 mne.set_config('SUBJECTS_DIR',subjects_dir)
 
-subjects = ['CC110033', 'CC110037', 'CC110045']
-N_JOBS = 3
+
+N_JOBS = 74
+
+t1_files = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + '*',
+             'anat', 'sub-' + '*' + '_T1w.nii.gz')
+
+
+t1_files = glob.glob(t1_files)
+
+subjects = [t1.split('/')[-3] for t1 in t1_files]
+
 
 def process_subject_bem(subject, spacing='ico5'):
     mne.bem.make_watershed_bem(subject=subject, subjects_dir=subjects_dir, overwrite=True, volume='T1', atlas=True,
