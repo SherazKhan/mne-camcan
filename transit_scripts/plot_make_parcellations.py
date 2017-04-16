@@ -1,6 +1,7 @@
 import os.path as op
 import math
 
+import glob
 import numpy as np
 
 import surfer
@@ -15,6 +16,21 @@ subjects_dir = op.expanduser(
 
 mne.datasets.fetch_hcp_mmp_parcellation(subjects_dir=subjects_dir,
                                         verbose=True)
+
+
+def save_parc_montage(parc):
+    for hemi in ('lh', 'rh'):
+        brain = surfer.Brain(
+            'fsaverage', surf='inflated', cortex='bone', hemi=hemi,
+            subjects_dir=subjects_dir)
+        brain.add_annotation(parc)
+        brain.save_montage('%s_%s.jpg' % (parc, hemi),
+                           order=('lat', 'med', 'dor', 'ven'))
+        brain.close()
+
+###############################################################################
+# HCP
+
 
 labels = mne.read_labels_from_annot(
     parc='HCPMMP1', subject='fsaverage', subjects_dir=subjects_dir)
@@ -46,20 +62,23 @@ mne.write_labels_to_annot(
     parc='HCPMMP1_auto_split', overwrite=True)
 
 # write out things
-for hemi in ('lh', 'rh'):
-    brain = surfer.Brain(
-        'fsaverage', surf='inflated', cortex='bone', hemi=hemi,
-        subjects_dir=subjects_dir)
-    brain.add_annotation('HCPMMP1')
-    brain.save_montage('hcp_parc_montage_%s.jpg' % hemi,
-                       order=('lat', 'med', 'dor', 'ven'))
-    brain.close()
 
-for hemi in ('lh', 'rh'):
-    brain = surfer.Brain(
-        'fsaverage', surf='inflated', cortex='bone', hemi=hemi,
-        subjects_dir=subjects_dir)
-    brain.add_annotation('HCPMMP1_auto_split')
-    brain.save_montage('hcp_parc_split_montage_%s.jpg' % hemi,
-                       order=('lat', 'med', 'dor', 'ven'))
-    brain.close()
+save_parc_montage(parc='HCPMMP1')
+save_parc_montage(parc='HCPMMP1_auto_split')
+
+###############################################################################
+# Sheraz Khan
+
+camcan_data_path = '~/Dropbox/mne-camcan-data'
+sheraz_labels_fnames = glob.glob(
+    op.expanduser(op.join(camcan_data_path, 'labels', '*.label')))
+
+sheraz_labels = [mne.read_label(fname, subject='fsaverage')
+                 for fname in sheraz_labels_fnames]
+
+mne.write_labels_to_annot(
+    sheraz_labels, subject='fsaverage', subjects_dir=subjects_dir,
+    parc='aparc_sk', overwrite=True)
+sheraz_labels
+
+save_parc_montage(parc='aparc_sk')
