@@ -15,10 +15,12 @@ meg_dir = op.expanduser(
 raw = mne.io.read_raw_fif(raw_fname)
 raw.load_data()
 raw.set_channel_types({'EEG057': 'ecg', 'EEG058': 'eog'})
-raw.pick_types(meg=True, eog=True, ecg=True)
+raw.rename_channels(
+    dict(zip(raw.ch_names, mne.utils._clean_names(raw.ch_names))))
+picks = mne.pick_types(raw.info, meg=True, eog=True, ecg=True)
 
 # ssp_ecg = mne.preprocessing.compute_proj_ecg(raw, n_jobs=4)
-raw.filter(1, 200)
+raw.filter(1, 200, picks=picks)
 
 # fast artefact rejection: project out the first EOG/ECG vectors
 ssp_ecg, _ = mne.preprocessing.compute_proj_ecg(raw)

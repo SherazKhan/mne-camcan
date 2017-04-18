@@ -1,11 +1,7 @@
 import os.path as op
-import glob
-import math
-
-import numpy as np
-
-import mne
 from mne.datasets.brainstorm import bst_resting
+import mne
+mne.utils.set_log_level('warning')
 
 data_path = bst_resting.data_path()
 raw_fname = op.join(
@@ -24,42 +20,76 @@ meg_dir = op.expanduser(
 
 spacing = 'ico5'
 
+proj_fname = op.join(meg_dir, subject, 'bst_resting_ecg-eog-proj.fif')
+noise_cov_fname = op.join(
+    meg_dir, subject, '%s-%s-cov.fif' % (subject, spacing))
+fwd_fname = op.join(meg_dir, subject, '%s_%s-fwd.fif' % (subject, spacing))
+
 raw = mne.io.read_raw_fif(raw_fname)
+projs = mne.read_proj(proj_fname)
+raw.add_proj(projs)
+raw.rename_channels(
+    dict(zip(raw.ch_names, mne.utils._clean_names(raw.ch_names))))
 raw.load_data()
-raw.set_channel_types({'EEG057': 'ecg', 'EEG058': 'eog'})
-raw.pick_types(meg=True, eog=True, ecg=True)
+raw.pick_types(meg=True, eeg=False, ref_meg=False)
 
-# ssp_ecg = mne.preprocessing.compute_proj_ecg(raw, n_jobs=4)
-raw.filter(1, 200)
-raw.info['highpass']
-average_ecg = mne.preprocessing.create_ecg_epochs(raw).average()
-average_ecg.apply_baseline(baseline=(-0.5, -0.3))
+fwd = mne.read_forward_solution(fwd_fname)
+src = fwd['src']
+noise_cov = mne.read_cov(noise_cov_fname)
 
-average_eog = mne.preprocessing.create_eog_epochs(raw).average()
-average_eog.apply_baseline(baseline=(-0.5, -0.3))
+for comp in raw.info['comps']:
+    for key in ('row_names', 'col_names'):
+        comp['data'][key] = mne.utils._clean_names(comp['data'][key])
+
+inverse_operator = mne.minimum_norm.make_inverse_operator(
+    raw.info, forward=fwd, noise_cov=noise_cov)
+
+labels = mne.read_labels_from_annot(
+    parc='aparc_sk', subject='fsaverage', subjects_dir=subjects_dir)
+
+for label in labels:
+    label.morph(subject_to=subject, subjects_dir=subjects_dir)
+
+decim = 9
+new_lowpass = raw.info['sfreq'] / decim
+raw._data = raw.get_data()[:, ::decim]
+raw._times = raw._times[::decim]
+raw.info['sfreq'] = new_lowpass
+raw._last_samps[0] /= decim
+raw._first_samps[0] /= decim
+raw.filter(14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
+           filter_length='auto', phase='zero', fir_window='hann')
+raw.apply_hilbert(envelope=False)
+
+import numpy as np
+
+labels = [ll for ll in labels if 'unknown' not in ll.name]
+index = np.arange(len(raw.times)).astype(int)
+index[::10000].shape
+
+raw.info['sfreq']
+source_decim = 10
+n_source_times = raw.get_data().shape[1] / source_decim
 
 
-# fast artefact rejection: project out the first EOG/ECG vectors
-ssp_ecg, ecg_events = mne.preprocessing.compute_proj_ecg(raw)
-ssp_eog, eog_events = mne.preprocessing.compute_proj_eog(raw)
-raw.add_proj(ssp_ecg[0])
-raw.add_proj(ssp_eog[0])
+def get_label_envelopes(raw, labels, step=10000, source_decim=10):
+    n_source_times = raw.get_data().shape[1] / source_decim
+    X_stc = np.empty((len(labels), n_source_times), dtype=np.float)
 
-bem_fname = op.join(subjects_dir, subject, 'bem', '%s-bem.fif' % subject)
-src_fname = op.join(
-    meg_dir, subject, '%s-%s-src.fif' % (subject, spacing))
+    index = np.arange(len(raw.times)).astype(int)
+    last = index[-1]
+    for start in index[::step]:
+        stop = start + min(step, last - start)
+        stc = mne.minimum_norm.apply_inverse_raw(
+            raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+            stop=stop, pick_ori="normal")
+        for label_idx, label in enumerate(labels):
+            tc = stc.extract_label_time_course(
+                label, src, mode='pca_flip_mean')
+            tc = np.abs(tc[0, ::source_decim])
+            X_stc[label_idx][(start / source_decim):(stop / source_decim)] = tc
+        break
+    return X_stc
 
-src = mne.read_source_spaces(src_fname)
-bem = mne.read_bem_solution(bem_fname)
 
-trans_fname = op.join(meg_dir, subject, "bs_resting_01-trans.fif")
-
-fwd = mne.make_forward_solution(raw.info, trans_fname, src=src, bem=bem)
-
-raw_noise = mne.io.read_raw_fif(raw_noise_fname)
-raw_noise.add_proj(ssp_ecg[:1] + ssp_eog[:1])
-raw_noise.load_data()
-raw_noise.filter(1, 200)
-noise_cov = mne.compute_raw_covariance(raw_noise, method='empirical')
-
-whos
+%time get_label_envelopes(raw, labels, step=10000)
