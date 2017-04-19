@@ -12,19 +12,24 @@ import bct
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
 
-data_path = '/home/sheraz/Dropbox/mne-camcan-data'
+# For laptop
+#data_path = '/home/sheraz/Dropbox/mne-camcan-data'
+
+# For Desktop
+data_path = '/cluster/transcend/sheraz/dropBoxSheraz/Dropbox/mne-camcan-data'
+
 subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
-# labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
-# labels = [mne.read_label(label, subject='fsaverageSK', color='r')
-#           for label in labels_fname]
-# for index, label in enumerate(labels):
-#     label.values.fill(1.0)
-#     labels[index] = label
-#
-# labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
+labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
+labels = [mne.read_label(label, subject='fsaverageSK', color='r')
+          for label in labels_fname]
+for index, label in enumerate(labels):
+    label.values.fill(1.0)
+    labels[index] = label
+
+labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
 event_overlap = 8
