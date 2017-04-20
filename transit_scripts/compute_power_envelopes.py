@@ -1,4 +1,3 @@
-import math
 import copy
 import os.path as op
 from mne.datasets.brainstorm import bst_resting
@@ -55,12 +54,18 @@ for label in labels:
     label.morph(subject_to=subject, subjects_dir=subjects_dir)
 
 decim = 9
-new_lowpass = raw.info['sfreq'] / decim
-raw._data = raw.get_data()[:, ::decim]
-raw._times = raw._times[::decim]
-raw.info['sfreq'] = new_lowpass
-raw._last_samps[0] /= decim
-raw._first_samps[0] /= decim
+
+
+def decimate_raw(raw, decim):
+    new_lowpass = raw.info['sfreq'] / decim
+    raw._data = raw.get_data()[:, ::decim]
+    raw._times = raw._times[::decim]
+    raw.info['sfreq'] = new_lowpass
+    raw._last_samps[0] /= decim
+    raw._first_samps[0] /= decim
+
+
+decimate_raw(raw, decim)
 raw.filter(14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
            filter_length='auto', phase='zero', fir_window='hann')
 raw.apply_hilbert(envelope=False)
@@ -116,6 +121,7 @@ raw_noise.rename_channels(
              mne.utils._clean_names(raw_noise.ch_names))))
 
 fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
+decimate_raw(raw_noise, decim=24)
 raw_repro = make_surrogates_empty_room(raw_noise, fwd_fixed, inverse_operator)
 
 
@@ -171,6 +177,8 @@ X_stc = get_label_envelopes(raw, labels, inverse_operator, step=10000)
 mne.externals.h5io.write_hdf5('power_envelopes.h5', {'beta': X_stc},
                               overwrite=True)
 
+del X_stc
+del raw
 
 raw_repro.filter(
    14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
@@ -179,5 +187,6 @@ raw_repro.apply_hilbert(envelope=False)
 
 X_stc_noise = get_label_envelopes(
     raw_repro, labels, inverse_operator, step=10000)
+
 mne.externals.h5io.write_hdf5(
-    'power_envelopes_beta.h5', {'beta': X_stc_noise})
+    'power_envelopes_noise.h5', {'beta': X_stc_noise})
