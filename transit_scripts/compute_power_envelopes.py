@@ -126,6 +126,10 @@ def get_label_envelopes(raw, labels, inverse_operator, step=10000,
     .. note::
         To safe memory, projection proceeds in non-overlapping sliding windows.
 
+    .. note::
+        This can take some time (scales linearly with number of samples,
+        time points and dipoles).
+
     Parameters
     ----------
     raw : instance of mne.io.Raw
@@ -164,14 +168,16 @@ def get_label_envelopes(raw, labels, inverse_operator, step=10000,
 
 
 X_stc = get_label_envelopes(raw, labels, inverse_operator, step=10000)
-mne.externals.h5io.write_hdf5('power_envelopes_beta.h5', {'X_stc': X_stc})
+mne.externals.h5io.write_hdf5('power_envelopes.h5', {'beta': X_stc},
+                              overwrite=True)
 
 
 raw_repro.filter(
    14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
    filter_length='auto', phase='zero', fir_window='hann')
-raw.apply_hilbert(envelope=False)
+raw_repro.apply_hilbert(envelope=False)
+
 X_stc_noise = get_label_envelopes(
     raw_repro, labels, inverse_operator, step=10000)
 mne.externals.h5io.write_hdf5(
-    'power_envelopes_beta_noise.h5', {'X_stc': X_stc})
+    'power_envelopes_beta.h5', {'beta': X_stc_noise})
