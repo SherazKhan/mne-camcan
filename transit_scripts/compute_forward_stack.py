@@ -39,7 +39,6 @@ src = mne.read_source_spaces(src_fname)
 bem = mne.read_bem_solution(bem_fname)
 
 trans_fname = op.join(meg_dir, subject, "bs_resting_01-trans.fif")
-
 for comp in raw.info['comps']:
     for key in ('row_names', 'col_names'):
         comp['data'][key] = mne.utils._clean_names(comp['data'][key])
@@ -63,5 +62,4 @@ raw_noise.filter(1, 200, picks)
 noise_cov = mne.compute_raw_covariance(raw_noise, method='empirical')
 mne.write_cov(op.join(meg_dir, subject, '%s-%s-cov.fif' % (subject, spacing)),
               noise_cov)
-
 assert noise_cov['names'] == fwd['info']['ch_names']
