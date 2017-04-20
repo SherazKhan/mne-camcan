@@ -10,7 +10,7 @@ raw_fname = op.join(
 
 raw_noise_fname = op.join(
     data_path,
-    'MEG/bst_resting/subj002_noise_20111104_02_raw.fif')
+    'MEG/bst_resting/subj002_noise_20111104_02_comp_raw.fif')
 
 subject = 'bst_resting'
 subjects_dir = op.expanduser(

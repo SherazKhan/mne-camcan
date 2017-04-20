@@ -1,6 +1,10 @@
+import math
+import copy
 import os.path as op
 from mne.datasets.brainstorm import bst_resting
 import mne
+import numpy as np
+
 mne.utils.set_log_level('warning')
 
 data_path = bst_resting.data_path()
@@ -10,7 +14,7 @@ raw_fname = op.join(
 
 raw_noise_fname = op.join(
     data_path,
-    'MEG/bst_resting/subj002_noise_20111104_02_raw.fif')
+    'MEG/bst_resting/subj002_noise_20111104_02_comp_raw.fif')
 
 subject = 'bst_resting'
 subjects_dir = op.expanduser(
@@ -60,24 +64,42 @@ raw._first_samps[0] /= decim
 raw.filter(14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
            filter_length='auto', phase='zero', fir_window='hann')
 raw.apply_hilbert(envelope=False)
-
-import numpy as np
-
 labels = [ll for ll in labels if 'unknown' not in ll.name]
-index = np.arange(len(raw.times)).astype(int)
-index[::10000].shape
-
-raw.info['sfreq']
-source_decim = 10
-n_source_times = raw.get_data().shape[1] / source_decim
 
 
-def get_label_envelopes(raw, labels, step=10000, source_decim=10):
+def reproject_raw(raw, fwd, inverse_operator, step=10000):
+    index = np.arange(len(raw.times)).astype(int)
+    last = len(index)
+    out = np.empty(raw.get_data().shape, dtype=raw.get_data().dtype)
+    picks = mne.pick_types(raw.info, meg=True, eeg=True, ref_meg=False)
+    other_picks = [ii for ii in range(len(raw.ch_names)) if ii not in picks]
+    out[other_picks] = raw.get_data()[other_picks]
+    for start in index[::step]:
+        stop = start + min(step, last - start)
+        stc = mne.minimum_norm.apply_inverse_raw(
+            raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+            stop=stop, pick_ori="normal")
+        reprojected = mne.apply_forward(fwd=fwd, stc=stc, info=raw.info)
+        out[picks, start:stop] = reprojected.data
+    out = mne.io.RawArray(out, info=copy.deepcopy(raw.info))
+    return out
+
+
+raw_noise = mne.io.read_raw_fif(raw_noise_fname)
+raw_noise.rename_channels(
+    dict(zip(raw_noise.ch_names,
+             mne.utils._clean_names(raw_noise.ch_names))))
+
+fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
+raw_repro = reproject_raw(raw_noise, fwd_fixed, inverse_operator)
+
+
+def get_label_envelopes(raw, labels, inverse_operator, step=10000,
+                        source_decim=10):
     n_source_times = raw.get_data().shape[1] / source_decim
     X_stc = np.empty((len(labels), n_source_times), dtype=np.float)
-
     index = np.arange(len(raw.times)).astype(int)
-    last = index[-1]
+    last = len(index)
     for start in index[::step]:
         stop = start + min(step, last - start)
         stc = mne.minimum_norm.apply_inverse_raw(
@@ -87,9 +109,11 @@ def get_label_envelopes(raw, labels, step=10000, source_decim=10):
             tc = stc.extract_label_time_course(
                 label, src, mode='pca_flip_mean')
             tc = np.abs(tc[0, ::source_decim])
-            X_stc[label_idx][(start / source_decim):(stop / source_decim)] = tc
-        break
+            start_target = int(math.floor(start / source_decim))
+            stop_target = int(math.floor(stop / source_decim))
+            X_stc[label_idx][start_target:stop_target] = tc
     return X_stc
 
 
-%time get_label_envelopes(raw, labels, step=10000)
+X_stc = get_label_envelopes(raw, labels, step=10000)
+mne.externals.h5io.write_hdf5('power_envelopes_beta.h5', {'X_stc': X_stc})
