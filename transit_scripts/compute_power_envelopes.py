@@ -193,4 +193,5 @@ mne.filter.filter_data(X_stc_noise, sfreq_env_noise, 0, 1)
 
 mne.externals.h5io.write_hdf5(
     'power_envelopes_noise.h5',
-    {'beta': X_stc_noise, 'sfreq': sfreq_env_noise})
+    {'beta': X_stc_noise, 'sfreq': sfreq_env_noise},
+    overwrite=True)
