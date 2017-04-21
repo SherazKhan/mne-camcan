@@ -196,3 +196,11 @@ brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap=
                  surface='inflated10', subjects_dir=subjects_dir)
 
 brain.save_image('beta_projected_erm_corr.png')
+
+
+
+##
+projected_erm_cov = mne.compute_raw_covariance(projected_erm_raw, tmin=0, tmax=None)
+cov.plot(raw.info)
+erm_cov.plot(erm_raw.info)
+projected_erm_cov.plot(projected_erm_raw.info)
