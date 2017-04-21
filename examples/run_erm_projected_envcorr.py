@@ -138,6 +138,14 @@ fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
 projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
 
 
+# Fun looking covriances
+cov.plot(raw.info)
+erm_cov.plot(erm_raw.info)
+projected_erm_cov.plot(projected_erm_raw.info)
+
+
+
+
 projected_erm_raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id, duration=event_overlap, start=0, stop=erm_raw_length-event_length)
