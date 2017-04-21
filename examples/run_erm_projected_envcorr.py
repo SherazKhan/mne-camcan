@@ -166,6 +166,25 @@ for index, label in enumerate(labels):
 
 
 
+labels_data_hipp = labels_data.copy()
+
+corr_mats = np.zeros((len(labels),len(labels), n_epochs))
+
+for index, label_data in enumerate(labels_data_hipp):
+    label_data_orth = np.imag(label_data*(labels_data_hipp.conj()/np.abs(labels_data_hipp)))
+    label_data_orig = np.abs(label_data)
+    label_data_cont = np.transpose(np.dstack((label_data_orig,
+                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
+    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
+    print(float(index)/len(labels)*100)
+
+corr_mats = np.transpose(corr_mats,(2,0,1))
+
+corr_hipp = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
+                        for corr_mat in corr_mats]),axis=0)
+
+
+
 
 labels_data = np.abs(hilbert(labels_data, axis=1))
 labels_data_erm = np.abs(hilbert(labels_data_erm, axis=1))
@@ -173,30 +192,48 @@ labels_data_erm = np.abs(hilbert(labels_data_erm, axis=1))
 labels_data = np.transpose(labels_data,(2,0,1))
 labels_data_erm = np.transpose(labels_data_erm,(2,0,1))
 
-corr_rest = np.array([np.corrcoef(dat) for dat in labels_data])
-corr_erm = np.array([np.corrcoef(dat) for dat in labels_data_erm])
+corr_rest = np.abs([np.corrcoef(np.log10(dat)) for dat in labels_data])
+corr_erm = np.abs([np.corrcoef(np.log10(dat)) for dat in labels_data_erm])
 
 corr_z =  np.zeros((len(labels), len(labels)))
-for index1 in range(len(labels)-1):
-    for index2 in range(index1+1, len(labels)):
-        corr_z[index1, index2] = ranksums(corr_rest[:, index1, index2],corr_erm[:, index1, index2])[0]
+for index1 in range(len(labels)):
+    for index2 in range(len(labels)):
+        corr_z[index1, index2] = ranksums(np.log10(corr_rest[:, index1, index2]),np.log10(corr_erm[:, index1, index2]))[0]
         print((index1, index2))
 
 
 
-corr_z = corr_z + corr_z.T
 
+
+corr_rest_median = np.median(corr_rest,0)
+corr_erm_median = np.median(corr_erm,0)
 
 
 corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
 deg = bct.degrees_und(corr)
 
-stc = get_stc(labels_fname, deg)
+stc = get_stc(labels_fname, corr_z[254,:])
 brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
                            views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir,)
+                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,6,7]})
 
 brain.save_image('beta_projected_erm_corr.png')
+
+
+corr = np.int32(bct.utils.threshold_proportional(np.median(corr_erm,0),.15) > 0)
+deg = bct.degrees_und(corr)
+
+stc = get_stc(labels_fname, bet[1])
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir)
+
+brain.save_image('beta_projected_erm_corr.png')
+
+
+ll = [label_fname.split('/')[-1] for label_fname in labels_fname]
+
+temporal_labels_indices = [index  for index,l in enumerate(ll) if 'lh' in l and 'sup' in l and 'marginal' in l]
 
 
 
@@ -205,3 +242,17 @@ projected_erm_cov = mne.compute_raw_covariance(projected_erm_raw, tmin=0, tmax=N
 cov.plot(raw.info)
 erm_cov.plot(erm_raw.info)
 projected_erm_cov.plot(projected_erm_raw.info)
+
+corr_zz = corr_z.copy()
+
+corr_zz[corr_zz<0] = 0
+
+stc = get_stc(labels_fname, corr_z[temporal_labels_indices,:].mean(0))
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,7.5,10]})
+
+stc = get_stc(labels_fname, corr_rest_median[temporal_labels_indices,:].mean(0))
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[0,.5,1]})
