@@ -6,6 +6,7 @@ from mne.preprocessing import compute_proj_ecg, compute_proj_eog
 import glob
 import numpy as np
 from scipy.signal import hilbert
+from scipy.stats import ranksums
 from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
 plt.ion()
@@ -129,30 +130,22 @@ for index, label in enumerate(labels):
     labels_data[index] = data
     print(float(index) / len(labels) * 100)
 
-labels_data = hilbert(labels_data, axis=1)
-corr_mats = np.zeros((len(labels),len(labels), n_epochs))
+
+
 
 
 fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
-
 projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
-
-
-# Fun looking covriances
-cov.plot(raw.info)
-erm_cov.plot(erm_raw.info)
-projected_erm_cov.plot(projected_erm_raw.info)
-
-
 
 
 projected_erm_raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
-projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id, duration=event_overlap, start=0, stop=erm_raw_length-event_length)
+projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id,
+                                                    duration=event_overlap, start=0,
+                                                    stop=erm_raw_length-event_length)
 projected_erm_epochs = mne.Epochs(projected_erm_raw, projected_erm_events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
 projected_erm_epochs.resample(100.)
-
 
 n_epochs, n_chs, n_time = projected_erm_epochs._data.shape
 
@@ -170,29 +163,31 @@ for index, label in enumerate(labels):
     labels_data_erm[index] = data
     print(float(index) / len(labels) * 100)
 
-labels_data_erm = hilbert(labels_data, axis=1)
 
 
 
 
+labels_data = np.abs(hilbert(labels_data, axis=1))
+labels_data_erm = np.abs(hilbert(labels_data_erm, axis=1))
+
+labels_data = np.transpose(labels_data,(2,0,1))
+labels_data_erm = np.transpose(labels_data_erm,(2,0,1))
+
+corr_rest = np.array([np.corrcoef(dat) for dat in labels_data])
+corr_erm = np.array([np.corrcoef(dat) for dat in labels_data_erm])
+
+corr_z =  np.zeros((len(labels),len(labels)))
+for index1 in range(len(labels))[:-1]:
+    for index2 in range(len(labels))[1:]:
+        corr_z[index1, index2] = ranksums(corr_rest[:, index1, index2],corr_erm[:, index1, index2])[0]
 
 
 
+corr_z = corr_z + corr_z.T
 
-for index, label_data in enumerate(labels_data):
-    label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
-    label_data_orig = np.abs(label_data)
-    label_data_cont = np.transpose(np.dstack((label_data_orig,
-                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
-    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
-    print(float(index)/len(labels)*100)
 
-corr_mats = np.transpose(corr_mats,(2,0,1))
 
-corr = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
-                        for corr_mat in corr_mats]),axis=0)
-
-corr = np.int32(bct.utils.threshold_proportional(corr,.15) > 0)
+corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
 deg = bct.density_und(corr)
 
 stc = get_stc(labels_fname, deg)
@@ -200,4 +195,4 @@ brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap=
                            views=['lateral','medial'],
                  surface='inflated10', subjects_dir=subjects_dir)
 
-brain.save_image('beta_orthogonal_corr.png')
+brain.save_image('beta_projected_erm_corr.png')
