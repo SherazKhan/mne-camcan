@@ -176,10 +176,11 @@ labels_data_erm = np.transpose(labels_data_erm,(2,0,1))
 corr_rest = np.array([np.corrcoef(dat) for dat in labels_data])
 corr_erm = np.array([np.corrcoef(dat) for dat in labels_data_erm])
 
-corr_z =  np.zeros((len(labels),len(labels)))
-for index1 in range(len(labels))[:-1]:
-    for index2 in range(len(labels))[1:]:
+corr_z =  np.zeros((len(labels), len(labels)))
+for index1 in range(len(labels)-1):
+    for index2 in range(index1+1, len(labels)):
         corr_z[index1, index2] = ranksums(corr_rest[:, index1, index2],corr_erm[:, index1, index2])[0]
+        print((index1, index2))
 
 
 
@@ -188,12 +189,12 @@ corr_z = corr_z + corr_z.T
 
 
 corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
-deg = bct.density_und(corr)
+deg = bct.degrees_und(corr)
 
 stc = get_stc(labels_fname, deg)
 brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
                            views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir)
+                 surface='inflated10', subjects_dir=subjects_dir,)
 
 brain.save_image('beta_projected_erm_corr.png')
 
