@@ -9,7 +9,7 @@ camcan_path = '/cluster/transcend/MEG'
 mne.set_config('SUBJECTS_DIR',subjects_dir)
 
 
-N_JOBS = 74
+N_JOBS = 256
 
 t1_files = op.join(camcan_path + '/camcan47/cc700/mri/pipeline/release004/BIDSsep/anat/sub-' + '*',
              'anat', 'sub-' + '*' + '_T1w.nii.gz')

@@ -25,6 +25,7 @@ import os.path as op
 import subprocess
 import time
 from mne.preprocessing import compute_proj_ecg, compute_proj_eog
+import copy
 
 
 class Flexlist(list):
@@ -511,3 +512,46 @@ def lin_reg(x, y, pvalue=0.05):
 
 def print_test():
     print('I am done')
+
+def make_surrogates_empty_room(raw, fwd, inverse_operator, step=10000):
+    """Create spatially structured noise from empty room MEG
+
+    .. note::
+        Convert MEG empty room to spatially structured noise by applying
+        the inverse solution and then the forward solution.
+
+    .. note::
+        To safe memory, projection proceeds in non-overlapping sliding windows.
+
+    Parameters
+    ----------
+    raw : instance of mne.io.Raw
+        The raw data (empty room).
+    fwd : instance of mne.Forward
+        The forward solution
+    inverse_operator : mne.minimum_norm.InverseOperator
+        The inverse solution.
+    step : int
+        The step size (in samples) when iterating over the raw object.
+
+    Returns
+    -------
+    raw_surr : instance of mne.io.Raw
+        The surrogate MEG data.
+    """
+    index = np.arange(len(raw.times)).astype(int)
+    out = np.empty(raw.get_data().shape, dtype=raw.get_data().dtype)
+    picks = mne.pick_types(raw.info, meg=True, eeg=True, ref_meg=False)
+    other_picks = [ii for ii in range(len(raw.ch_names)) if ii not in picks]
+    out[other_picks] = raw.get_data()[other_picks]
+    last = len(index)
+    for start in index[::step]:
+        stop = start + min(step, last - start)
+        stc = mne.minimum_norm.apply_inverse_raw(
+            raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+            stop=stop, pick_ori="normal")
+        reprojected = mne.apply_forward(fwd=fwd, stc=stc, info=raw.info)
+        out[picks, start:stop] = reprojected.data
+    out = mne.io.RawArray(out, info=copy.deepcopy(raw.info))
+    return out
+

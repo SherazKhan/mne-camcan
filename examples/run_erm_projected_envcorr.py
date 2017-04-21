@@ -6,9 +6,9 @@ from mne.preprocessing import compute_proj_ecg, compute_proj_eog
 import glob
 import numpy as np
 from scipy.signal import hilbert
-from camcan.utils import get_stc
+from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
-
+plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
 
@@ -16,7 +16,7 @@ subject = subjects[0]
 #data_path = '/home/sheraz/Dropbox/mne-camcan-data'
 
 # For Desktop
-data_path = '/cluster/transcend/sheraz/dropBoxSheraz/Dropbox/mne-camcan-data'
+data_path = '/cluster/transcend/sheraz/Dropbox/mne-camcan-data/'
 
 subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
@@ -32,7 +32,7 @@ for index, label in enumerate(labels):
 labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
-event_overlap = 8
+event_overlap = 4
 event_length = 30
 spacing='ico5'
 
@@ -99,12 +99,7 @@ epochs = mne.Epochs(raw, events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
 epochs.resample(100.)
 
-erm_raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
-           filter_length='auto', phase='zero', fir_window='hann')
-erm_events = mne.make_fixed_length_events(erm_raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
-erm_epochs = mne.Epochs(erm_raw, erm_events, event_id, 0,
-                    event_length, baseline=None, preload=True, proj=False, reject=reject)
-erm_epochs.resample(100.)
+
 
 bem_fname = op.join(bem_dir, '%s-src.fif' % subject)
 src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
@@ -136,6 +131,45 @@ for index, label in enumerate(labels):
 
 labels_data = hilbert(labels_data, axis=1)
 corr_mats = np.zeros((len(labels),len(labels), n_epochs))
+
+
+fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
+
+projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
+
+
+projected_erm_raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+           filter_length='auto', phase='zero', fir_window='hann')
+projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id, duration=event_overlap, start=0, stop=erm_raw_length-event_length)
+projected_erm_epochs = mne.Epochs(projected_erm_raw, projected_erm_events, event_id, 0,
+                    event_length, baseline=None, preload=True, proj=False, reject=reject)
+projected_erm_epochs.resample(100.)
+
+
+n_epochs, n_chs, n_time = projected_erm_epochs._data.shape
+
+labels_data_erm = np.zeros((len(labels), n_time, n_epochs))
+
+for index, label in enumerate(labels):
+    stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, label, pick_ori="normal")
+    data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
+    n_verts, n_time, n_epochs = data.shape
+    data = data.reshape(n_verts, n_time * n_epochs)
+    U, S, V = np.linalg.svd(data, full_matrices=False)
+    flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
+    data = flip[:, np.newaxis] * data
+    data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
+    labels_data_erm[index] = data
+    print(float(index) / len(labels) * 100)
+
+labels_data_erm = hilbert(labels_data, axis=1)
+
+
+
+
+
+
+
 
 for index, label_data in enumerate(labels_data):
     label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))

@@ -3,7 +3,7 @@ from nipype.interfaces.freesurfer import ReconAll
 from mne.parallel import parallel_func
 import glob
 
-subjects_dir = '/cluster/fusion/Sheraz/camcan/recons'
+subjects_dir = '/cluster/fusion/Sheraz/camcan/freesurfer'
 camcan_path = '/cluster/transcend/MEG'
 
 
