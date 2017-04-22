@@ -1,5 +1,6 @@
 import copy
 import mne
+from mne.io.constants import FIFF
 import numpy as np
 
 
@@ -107,6 +108,7 @@ def get_label_data(raw, labels, inverse_operator, step=10000,
     sfreq = raw.info['sfreq'] / source_decim
     src = inverse_operator['src']
     last = len(index)
+    # XXX return Raw here actually and call it `compute_inverse_raw`
     for start in index[::step]:
         stop = start + min(step, last - start)
         stc = mne.minimum_norm.apply_inverse_raw(
@@ -123,7 +125,20 @@ def get_label_data(raw, labels, inverse_operator, step=10000,
 
 
 def compute_corr(x, y):
-    """Correlate 2 matrices along last axis"""
+    """Correlate 2 matrices along last axis.
+
+    Parameters
+    ----------
+    x : np.ndarray of shape(n_time_series, n_times)
+        The first set of vectors.
+    y : np.ndarray of shape(n_time_series, n_times)
+        The second set of vectors.
+
+    Retrurns
+    --------
+    r : np.ndarray of shape(n_time_series,)
+        The correlation betwen x and y.
+    """
     xm = x - x.mean(axis=-1, keepdims=True)
     ym = y - y.mean(axis=-1, keepdims=True)
     r_den = np.sqrt(np.sum(xm * xm, axis=-1) *
@@ -132,37 +147,66 @@ def compute_corr(x, y):
     return r
 
 
-def orthogonalize_y(x, y):
-    pow_x = np.abs(x)
-    pow_x **= 2
-    y_ = y - np.real((x * y.conjugate()) / (pow_x))
-    y_ *= x
-    return y_
-    # set y to x and make sure y_oth is 0
+def _orthogonalize_y(x, y):
+    """orthogonalize x on y."""
+    return np.imag(x * (y.conj() / np.abs(y)))
 
 
-def orthogonalize_x(x, y):
-    return orthogonalize_y(y, x)
-
-
-def filt_fun(x, sfreq):
-    return mne.filter.filter_data(
-        x, sfreq=sfreq, l_freq=0, h_freq=1, h_trans_bandwidth=0.1,
-        fir_design='firwin2')
+def _orthogonalize_x(x, y):
+    """orthogonalize x on y."""
+    return _orthogonalize_y(y, x)
 
 
 def compute_envelope_correllation(X):
-    """"""
-    output = np.empty((len(X), len(X)), dtype=np.float)
+    """Compute power envelope correlation with orthogonalization.
+
+    Parameters
+    ----------
+    X : np.ndarray of shape(n_labels, n_time_series)
+        The source data.
+
+    Returns
+    -------
+    corr : np.ndarray of shape (n_labels, n_labels)
+        The connectivity matrix.
+    """
+    corr = np.empty((len(X), len(X)), dtype=np.float)
     y = X
 
     def fun(x):
         return np.abs(x)
 
     for ii, x in enumerate(X):
-        x_ = orthogonalize_x(x, y)
-        y_ = orthogonalize_y(x, y)
-        output[ii] = np.mean((
-            compute_corr(fun(x), fun(y_)),
-            compute_corr(fun(x_), fun(y))), 0)
-    return output
+        x_ = _orthogonalize_x(x, y)
+        y_ = _orthogonalize_y(x, y)
+        corr[ii] = np.mean((
+            compute_corr(fun(x), y_), compute_corr(x_, fun(y))), axis=0)
+    return corr
+
+
+def make_envelope_correllation(stcs, duration, overlap, stop, sfreq):
+
+    label_names = [str(k) for k in range(len(stcs))]
+    n_labels = len(label_names)
+    info = mne.create_info(
+        ch_names=label_names, sfreq=sfreq, ch_types=['misc'] * len(stcs))
+    for ch in info['chs']:
+        ch['unit'] = FIFF.FIFF_UNIT_AM
+        ch['unit_mul'] = FIFF.FIFF_UNIT_NONE
+
+    stcs = mne.io.RawArray(stcs, info)
+    stcs.apply_hilbert(envelope=False)
+
+    events = make_overlapping_events(stcs, 3000, duration=duration,
+                                     overlap=overlap, stop=stop)
+
+    stcs = mne.Epochs(stcs, events=events, tmin=0, tmax=duration,
+                      baseline=None, reject=None, preload=True)
+
+    env_corrs = np.empty((len(stcs), n_labels, n_labels),
+                         dtype=np.float)
+
+    for ii, stc_epoch in enumerate(stcs):
+        env_corrs[ii] = compute_envelope_correllation(stc_epoch)
+
+    return env_corrs
