@@ -173,14 +173,15 @@ def compute_envelope_correllation(X):
     corr = np.empty((len(X), len(X)), dtype=np.float)
     y = X
 
-    def fun(x):
+    def f(x):
+        # return np.log10(np.abs(x) ** 2)
         return np.abs(x)
 
     for ii, x in enumerate(X):
-        x_ = _orthogonalize_x(x, y)
-        y_ = _orthogonalize_y(x, y)
+        x_, y_ = _orthogonalize_x(x, y), _orthogonalize_y(x, y)
         corr[ii] = np.mean((
-            compute_corr(fun(x), y_), compute_corr(x_, fun(y))), axis=0)
+            compute_corr(f(x), (y_)),
+            compute_corr((x_), f(y))), axis=0)
     return corr
 
 
@@ -188,6 +189,7 @@ def make_envelope_correllation(stcs, duration, overlap, stop, sfreq):
 
     label_names = [str(k) for k in range(len(stcs))]
     n_labels = len(label_names)
+
     info = mne.create_info(
         ch_names=label_names, sfreq=sfreq, ch_types=['misc'] * len(stcs))
     for ch in info['chs']:
@@ -195,7 +197,7 @@ def make_envelope_correllation(stcs, duration, overlap, stop, sfreq):
         ch['unit_mul'] = FIFF.FIFF_UNIT_NONE
 
     stcs = mne.io.RawArray(stcs, info)
-    stcs.apply_hilbert(envelope=False)
+    stcs.apply_hilbert(envelope=False, picks=list(range(n_labels)))
 
     events = make_overlapping_events(stcs, 3000, duration=duration,
                                      overlap=overlap, stop=stop)
