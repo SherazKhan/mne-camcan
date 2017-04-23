@@ -180,8 +180,8 @@ def compute_envelope_correllation(X):
     for ii, x in enumerate(X):
         x_, y_ = _orthogonalize_x(x, y), _orthogonalize_y(x, y)
         corr[ii] = np.mean((
-            compute_corr(f(x), (y_)),
-            compute_corr((x_), f(y))), axis=0)
+            compute_corr(f(x), f(y_)),
+            compute_corr(f(x_), f(y))), axis=0)
     return corr
 
 

@@ -27,3 +27,4 @@ import numpy as np
 
 
 plt.matshow(np.abs(env_corr[0]), cmap='viridis')
+plt.colorbar()
