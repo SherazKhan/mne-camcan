@@ -175,12 +175,12 @@ def compute_envelope_correllation(X):
         y = X[jj:]
         x_, y_ = _orthogonalize(a=x, b=y), _orthogonalize(a=y, b=x)
         this_corr = np.mean((
-            np.abs(compute_corr(f(x), (y_))),
-            np.abs(compute_corr(f(y), (x_)))), axis=0)
+            np.abs(compute_corr(f(x), y_)),
+            np.abs(compute_corr(f(y), x_))), axis=0)
         corr[ii:jj, jj:] = this_corr
 
-    corr.flat[::len(X) + 1] = 0
-    corr += corr.T
+    corr.flat[::len(X) + 1] = 0  # orthogonalized correlation should be 0
+    corr += corr.T  # mirror lower diagonal
     return corr
 
 
