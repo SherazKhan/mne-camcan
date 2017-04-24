@@ -25,6 +25,5 @@ env_corr[0].flat[::len(env_corr[0]) + 1] = 0.
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 plt.matshow(np.abs(env_corr[0]), cmap='viridis')
 plt.colorbar()

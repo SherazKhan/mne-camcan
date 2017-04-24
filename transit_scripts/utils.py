@@ -147,14 +147,9 @@ def compute_corr(x, y):
     return r
 
 
-def _orthogonalize_y(x, y):
+def _orthogonalize(a, b):
     """orthogonalize x on y."""
-    return np.imag(x * (y.conj() / np.abs(y)))
-
-
-def _orthogonalize_x(x, y):
-    """orthogonalize x on y."""
-    return _orthogonalize_y(y, x)
+    return np.imag(a * (b.conj() / np.abs(b)))
 
 
 def compute_envelope_correllation(X):
@@ -178,10 +173,10 @@ def compute_envelope_correllation(X):
         return np.abs(x)
 
     for ii, x in enumerate(X):
-        x_, y_ = _orthogonalize_x(x, y), _orthogonalize_y(x, y)
+        x_, y_ = _orthogonalize(a=x, b=y), _orthogonalize(a=y, b=x)
         corr[ii] = np.mean((
-            compute_corr(f(x), f(y_)),
-            compute_corr(f(x_), f(y))), axis=0)
+            compute_corr(f(x), (y_)),
+            compute_corr(f(y), (x_))), axis=0)
     return corr
 
 
