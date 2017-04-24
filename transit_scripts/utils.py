@@ -166,17 +166,21 @@ def compute_envelope_correllation(X):
         The connectivity matrix.
     """
     corr = np.empty((len(X), len(X)), dtype=np.float)
-    y = X
 
     def f(x):
-        # return np.log10(np.abs(x) ** 2)
         return np.abs(x)
 
     for ii, x in enumerate(X):
+        jj = ii + 1
+        y = X[jj:]
         x_, y_ = _orthogonalize(a=x, b=y), _orthogonalize(a=y, b=x)
-        corr[ii] = np.mean((
-            compute_corr(f(x), (y_)),
-            compute_corr(f(y), (x_))), axis=0)
+        this_corr = np.mean((
+            np.abs(compute_corr(f(x), (y_))),
+            np.abs(compute_corr(f(y), (x_)))), axis=0)
+        corr[ii:jj, jj:] = this_corr
+
+    corr.flat[::len(X) + 1] = 0
+    corr += corr.T
     return corr
 
 
