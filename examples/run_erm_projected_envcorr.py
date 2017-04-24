@@ -9,12 +9,12 @@ from scipy.signal import hilbert
 from scipy.stats import ranksums
 from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
+import joblib
+
+
 plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
-
-# For laptop
-#data_path = '/home/sheraz/Dropbox/mne-camcan-data'
 
 # For Desktop
 data_path = '/cluster/transcend/sheraz/Dropbox/mne-camcan-data/'
@@ -92,7 +92,7 @@ erm_raw.filter(None, 40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
 
 erm_cov = mne.compute_raw_covariance(erm_raw, tmin=0, tmax=None)
 
-raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+raw.filter(8, 12, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 reject = dict(grad=1000e-13, mag=1.2e-12)
 events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
@@ -138,7 +138,7 @@ fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
 projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
 
 
-projected_erm_raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+projected_erm_raw.filter(8, 12, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id,
                                                     duration=event_overlap, start=0,
@@ -167,6 +167,8 @@ for index, label in enumerate(labels):
 
 
 labels_data_hipp = labels_data.copy()
+labels_data_hipp = hilbert(labels_data_hipp, axis=1)
+
 
 corr_mats = np.zeros((len(labels),len(labels), n_epochs))
 
@@ -209,33 +211,18 @@ corr_rest_median = np.median(corr_rest,0)
 corr_erm_median = np.median(corr_erm,0)
 
 
-corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
-deg = bct.degrees_und(corr)
-
-stc = get_stc(labels_fname, corr_z[254,:])
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,6,7]})
-
-brain.save_image('beta_projected_erm_corr.png')
-
-
-corr = np.int32(bct.utils.threshold_proportional(np.median(corr_erm,0),.15) > 0)
-deg = bct.degrees_und(corr)
-
-stc = get_stc(labels_fname, bet[1])
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir)
-
-brain.save_image('beta_projected_erm_corr.png')
-
-
 ll = [label_fname.split('/')[-1] for label_fname in labels_fname]
 
 temporal_labels_indices = [index  for index,l in enumerate(ll) if 'lh' in l and 'sup' in l and 'marginal' in l]
 
 
+
+
+data = {'corr_rest_media': corr_rest_media, 'corr_erm_median':corr_erm_median,
+        'corr_z':corr_z, 'corr_hipp':corr_hipp, 'labels_fname':labels_fname}
+
+hkl_fname = os.path.join(dir_path,'corrs.hkl')
+hkl.dump(data, hkl_fname)
 
 ##
 projected_erm_cov = mne.compute_raw_covariance(projected_erm_raw, tmin=0, tmax=None)
@@ -256,3 +243,14 @@ stc = get_stc(labels_fname, corr_rest_median[temporal_labels_indices,:].mean(0))
 brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
                            views=['lateral','medial'],
                  surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[0,.5,1]})
+
+
+corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
+deg = bct.degrees_und(corr)
+
+stc = get_stc(labels_fname, corr_z[254,:])
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,6,7]})
+
+brain.save_image('beta_projected_erm_corr.png')
