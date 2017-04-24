@@ -14,14 +14,14 @@ subject_id = "fsaverage"
 hemi = "lh"
 surf = "inflated_pre"
 brain = Brain(subject_id, hemi, surf)
-labels = glob.glob("/cluster/transcend/sheraz/fix/labels/*lh.label")
+labels = glob.glob("/home/sheraz/Dropbox/mne-camcan-data/label68/lh*.label")
 labels.sort()
-cmap = plt.cm.get_cmap('prism', 225)
+cmap = plt.cm.get_cmap('Set3', 34)
 cmaplist = [cmap(i) for i in range(cmap.N)]
 
-for i in range(225):
+for i in range(34):
     brain.add_label(labels[i], (0.7 * np.random.rand(1, 1) + 0.3, np.random.rand(1, 1), np.random.rand(1, 1)),
-                    alpha=0.7)
+                    alpha=0.85)
 
 brain.show_view("lateral")
 brain.save_image("lr1.tiff")

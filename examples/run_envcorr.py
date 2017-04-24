@@ -77,7 +77,7 @@ src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
 bem = mne.read_bem_solution(bem_fname)
 src = mne.read_source_spaces(src_fname)
 
-fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem,fname=None, meg=True, eeg=False, n_jobs=2)
+fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth=0.8)
 
 snr = 1.0  # use lower SNR for single epochs
