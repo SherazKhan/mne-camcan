@@ -2,7 +2,8 @@ import os.path as op
 from mne.datasets.brainstorm import bst_resting
 import mne
 
-from utils import decimate_raw, make_surrogates_empty_room, get_label_data
+from utils import (
+    decimate_raw, make_surrogates_empty_room, compute_inverse_raw_label)
 
 mne.utils.set_log_level('warning')
 
@@ -50,23 +51,20 @@ inverse_operator = mne.minimum_norm.make_inverse_operator(
 labels = mne.read_labels_from_annot(
     parc='aparc_sk', subject='fsaverage', subjects_dir=subjects_dir)
 
+labels = [ll for ll in labels if 'unknown' not in ll.name]
 for label in labels:
     label.morph(subject_to=subject, subjects_dir=subjects_dir)
 
-
 decimate_raw(raw, decim=9)
-raw.filter(14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
-           filter_length='auto', phase='zero', fir_window='hann')
-labels = [ll for ll in labels if 'unknown' not in ll.name]
+raw_label = compute_inverse_raw_label(raw, labels, inverse_operator,
+                                      label_mode='pca_flip_mean')
+raw_label.rename_channels(
+    dict(zip(raw_label.ch_names,
+             ['l%03d' % ii for ii, _ in enumerate(raw_label.ch_names)])))
 
-X_stc, sfreq_env_data = get_label_data(
-    raw, labels, inverse_operator, step=10000)
-mne.externals.h5io.write_hdf5(
-    'power_envelopes.h5', {'beta': X_stc, 'sfreq': sfreq_env_data},
-    overwrite=True)
+raw_label.save('labels_aparc_sk_broadband_raw.fif', overwrite=True)
 
-del X_stc
-del raw
+del raw_label
 
 raw_noise = mne.io.read_raw_fif(raw_noise_fname)
 raw_noise.rename_channels(
@@ -75,17 +73,9 @@ raw_noise.rename_channels(
 
 fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
 decimate_raw(raw_noise, decim=24)
-raw_repro = make_surrogates_empty_room(
-    raw_noise, fwd_fixed, inverse_operator)
+raw_repro = make_surrogates_empty_room(raw_noise, fwd_fixed, inverse_operator)
 
-raw_repro.filter(
-   14, 30, l_trans_bandwidth=1., h_trans_bandwidth=1.,
-   filter_length='auto', phase='zero', fir_window='hann')
+raw_label_noise = compute_inverse_raw_label(
+    raw_repro, labels, inverse_operator, label_mode='pca_flip_mean')
 
-X_stc_noise, sfreq_env_noise = get_label_data(
-    raw_repro, labels, inverse_operator, step=10000)
-
-mne.externals.h5io.write_hdf5(
-    'power_envelopes_noise.h5',
-    {'beta': X_stc_noise, 'sfreq': sfreq_env_noise},
-    overwrite=True)
+raw_label_noise.save('labels_aparc_sk_broadband_noise_raw.fif', overwrite=True)

@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+    # -*- coding: utf-8 -*-
 """
 Created on Thu Aug 11 15:12:09 2016
 @author: sheraz
@@ -554,4 +554,3 @@ def make_surrogates_empty_room(raw, fwd, inverse_operator, step=10000):
         out[picks, start:stop] = reprojected.data
     out = mne.io.RawArray(out, info=copy.deepcopy(raw.info))
     return out
-
