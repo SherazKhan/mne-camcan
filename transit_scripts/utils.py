@@ -223,8 +223,8 @@ def compute_envelope_correllation(X):
     corr : np.ndarray of shape (n_labels, n_labels)
         The connectivity matrix.
     """
-    corr = np.empty((len(X), len(X)), dtype=np.float)
-
+    n_features = X.shape[0]
+    corr = np.zeros((n_features, n_features), dtype=np.float)
     for ii, x in enumerate(X):
         jj = ii + 1
         y = X[jj:]
@@ -234,9 +234,8 @@ def compute_envelope_correllation(X):
             np.abs(compute_corr(np.abs(y), x_))), axis=0)
         corr[ii:jj, jj:] = this_corr
 
-    corr.flat[::len(X) + 1] = 0  # orthogonalized correlation should be 0
-    corr += corr.T  # mirror lower diagonal
-    return corr
+    corr.flat[::n_features + 1] = 0  # orthogonalized correlation should be 0
+    return corr + corr.T  # mirror lower diagonal
 
 
 def make_envelope_correllation(stcs, duration, overlap, stop, sfreq):
