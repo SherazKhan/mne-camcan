@@ -20,11 +20,11 @@ for fname in ('power_envelopes.h5', 'power_envelopes_noise.h5'):
         fname.replace('.h5', '_corr.h5'), env_corr, overwrite=True)
     break
 
-env_corr[0].flat[::len(env_corr[0]) + 1] = 0.
+# env_corr[0].flat[::len(env_corr[0]) + 1] = 0.
+#
 
+#
 import matplotlib.pyplot as plt
 import numpy as np
-
-
 plt.matshow(np.abs(env_corr[0]), cmap='viridis')
 plt.colorbar()

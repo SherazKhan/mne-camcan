@@ -218,7 +218,7 @@ temporal_labels_indices = [index  for index,l in enumerate(ll) if 'lh' in l and 
 
 
 
-data = {'corr_rest_media': corr_rest_media, 'corr_erm_median':corr_erm_median,
+data = {'corr_rest_median': corr_rest_median, 'corr_erm_median':corr_erm_median,
         'corr_z':corr_z, 'corr_hipp':corr_hipp, 'labels_fname':labels_fname}
 
 hkl_fname = os.path.join(dir_path,'corrs.hkl')
