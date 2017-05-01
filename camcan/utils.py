@@ -11,6 +11,7 @@ from mne.io.constants import FIFF
 from mne.io import read_raw_fif
 from mne import EpochsArray
 import numpy as np
+from spectrum import pmtm as pspec
 from mne.utils import logger
 from mne.time_frequency.tfr import _check_decim, morlet, cwt
 from mne.parallel import parallel_func
@@ -554,4 +555,58 @@ def make_surrogates_empty_room(raw, fwd, inverse_operator, step=10000):
         out[picks, start:stop] = reprojected.data
     out = mne.io.RawArray(out, info=copy.deepcopy(raw.info))
     return out
+
+
+def subsequences(sig, frameSize, overlapFac=0.75):
+    hopSize = int(frameSize - np.floor(overlapFac * frameSize))
+    samples = np.append(np.zeros(int(np.floor(frameSize/2.0))), sig)
+    cols = np.ceil( (len(samples) - frameSize) / float(hopSize)) + 1
+    samples = np.append(samples, np.zeros(frameSize))
+    frames = np.lib.stride_tricks.as_strided(samples, shape=(cols, frameSize), strides=(samples.strides[0]*hopSize, samples.strides[0])).copy()
+    return frames
+
+
+def nextpow2(i):
+    '''
+    Find 2^n that is equal to or greater than.
+    '''
+    n = 2
+    while n < i: n = n * 2
+    return n
+
+
+def pmtm(y, fs, K):
+    '''
+    Multi taper estiamtion of PSD with prolate-spheroidal tapers
+
+    IN:
+    t - time vector
+    y - time series
+    K - time-bandwidth product
+
+    OUT:
+    f - vector of frequencies
+    Sh - One sided PSD
+    '''
+    N = y.shape[0]
+    Nfft = nextpow2(N)
+    z = np.zeros(Nfft - N)
+    yz = np.r_[z, y]
+    S = pspec(yz, NW=K, show=False)
+    # Only keep one sided spectrum
+    Sh = S[0:Nfft / 2]
+    Sh = Sh.flatten()
+    return Sh
+
+
+def stft(sig, fs, frameSize=None, overlapFac=0.75, window=np.hanning):
+
+    if frameSize is None:
+        frameSize = 8*fs
+
+    frames=subsequences(sig, frameSize, overlapFac=overlapFac)
+    win = window(frameSize)
+    frames *= win
+    freq = np.fft.rfftfreq(frameSize, d=1./fs)
+    return freq, np.mean(np.abs(np.fft.rfft(frames)), axis=0)
 

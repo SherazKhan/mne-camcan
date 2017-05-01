@@ -6,13 +6,14 @@ from mne.preprocessing import compute_proj_ecg, compute_proj_eog
 import glob
 import numpy as np
 from scipy.signal import hilbert
-from camcan.utils import get_stc
+from camcan.utils import get_stc, stft
+
 import bct
 
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
 
-data_path = '/home/sheraz/Dropbox/mne-camcan-data'
+data_path = '/cluster/transcend/sheraz/Dropbox/mne-camcan-data/'
 subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
@@ -57,19 +58,19 @@ raw.info['projs'] += projs_eog
 
 raw.apply_proj()
 
-raw.filter(None, 40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+raw.filter(.5, 100, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 
 cov = mne.compute_raw_covariance(raw, tmin=0, tmax=None)
 
-raw.filter(14, 30, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
-           filter_length='auto', phase='zero', fir_window='hann')
+#raw.filter(8, 12, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+#           filter_length='auto', phase='zero', fir_window='hann')
 
-reject = dict(grad=1000e-13, mag=1.2e-12)
+reject = dict(grad=4000e-13, mag=4e-12)
 events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
 epochs = mne.Epochs(raw, events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-epochs.resample(100.)
+epochs.resample(300.)
 
 bem_fname = op.join(bem_dir, '%s-src.fif' % subject)
 src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
@@ -77,7 +78,7 @@ src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
 bem = mne.read_bem_solution(bem_fname)
 src = mne.read_source_spaces(src_fname)
 
-fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem,fname=None, meg=True, eeg=False, n_jobs=2)
+fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth=0.8)
 
 snr = 1.0  # use lower SNR for single epochs
@@ -95,9 +96,18 @@ for index, label in enumerate(labels):
     U, S, V = np.linalg.svd(data, full_matrices=False)
     flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
     data = flip[:, np.newaxis] * data
-    data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
+    data = np.median(data.reshape(n_verts, n_time, n_epochs), axis=0)
     labels_data[index] = data
     print(float(index) / len(labels) * 100)
+
+labels_psd = np.zeros((len(labels), n_epochs, 1201))
+for ind1 in np.arange(len(labels)):
+    for ind2 in np.arange(n_epochs):
+        labels_psd[ind1,ind2,:] = stft(labels_data[ind1,:,ind2], 300)[1]
+        print(ind1)
+freq = stft(labels_data[ind1,:,ind2], 300)[0]
+
+
 
 labels_data = hilbert(labels_data, axis=1)
 corr_mats = np.zeros((len(labels),len(labels), n_epochs))
@@ -113,6 +123,22 @@ for index, label_data in enumerate(labels_data):
 corr_mats = np.transpose(corr_mats,(2,0,1))
 
 corr = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
+                        for corr_mat in corr_mats]),axis=0)
+
+
+corr_mats = np.zeros((len(labels),len(labels), n_epochs))
+
+for index, label_data in enumerate(labels_data):
+    label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
+    label_data_orig = np.abs(np.random.permutation(label_data))
+    label_data_cont = np.transpose(np.dstack((label_data_orig,
+                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
+    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
+    print(float(index)/len(labels)*100)
+
+corr_mats = np.transpose(corr_mats,(2,0,1))
+
+corr_surrogate = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
                         for corr_mat in corr_mats]),axis=0)
 
 corr = np.int32(bct.utils.threshold_proportional(corr,.15) > 0)

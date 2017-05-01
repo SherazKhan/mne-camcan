@@ -24,16 +24,16 @@ subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
 labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
-labels = [mne.read_label(label, subject='fsaverageSK', color='r')
-          for label in labels_fname]
-for index, label in enumerate(labels):
-    label.values.fill(1.0)
-    labels[index] = label
+# labels = [mne.read_label(label, subject='fsaverageSK', color='r')
+#           for label in labels_fname]
+# for index, label in enumerate(labels):
+#     label.values.fill(1.0)
+#     labels[index] = label
 
-labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
+#labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
-event_overlap = 4
+event_overlap = 8
 event_length = 30
 spacing='ico5'
 
@@ -98,7 +98,7 @@ reject = dict(grad=1000e-13, mag=1.2e-12)
 events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
 epochs = mne.Epochs(raw, events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-epochs.resample(100.)
+epochs.resample(50.)
 
 
 

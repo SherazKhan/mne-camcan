@@ -28,3 +28,36 @@ brain.save_image("lr1.tiff")
 
 brain.show_view("medial")
 brain.save_image("lm1.tiff")
+
+
+n_labels = len(labels)
+label_names = ['L%03d' % ii for ii in range(n_labels)]
+
+info = mne.create_info(
+    ch_names=label_names, sfreq=300, ch_types=['misc'] * n_labels)
+
+info['highpass'] = raw.info['highpass']
+info['lowpass'] = raw.info['lowpass']
+for ch in info['chs']:
+    ch['unit'] = FIFF.FIFF_UNIT_AM  # put ampere meter
+    ch['unit_mul'] = FIFF.FIFF_UNIT_NONE  # no unit multiplication
+
+label_raw = mne.io.RawArray(label_raw, info)
+label_raw.annotations = raw.annotations
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
