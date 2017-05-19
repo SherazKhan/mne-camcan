@@ -78,24 +78,31 @@ src = mne.read_source_spaces(src_fname)
 fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=1)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth=0.8)
 
-snr = 1.0  # use lower SNR for single epochs
-lambda2 = 1.0 / snr ** 2
-method = "MNE"
-n_epochs, n_chs, n_time = epochs._data.shape
 
-labels_data = np.zeros((len(labels), n_time, n_epochs))
 
-for index, label in enumerate(labels):
-    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, label, pick_ori="normal")
-    data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
-    n_verts, n_time, n_epochs = data.shape
-    data = data.reshape(n_verts, n_time * n_epochs)
-    U, S, V = np.linalg.svd(data, full_matrices=False)
-    flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
-    data = flip[:, np.newaxis] * data
-    data = np.median(data.reshape(n_verts, n_time, n_epochs), axis=0)
-    labels_data[index] = data
-    print(float(index) / len(labels) * 100)
+def epochs_to_labels_sk(epochs, labels, inv, lambda2 = 1.0 / (1.0 ** 2), method = 'MNE'):
+    n_epochs, n_chs, n_time = epochs._data.shape
+    labels_data = np.zeros((len(labels), n_time, n_epochs))
+    for index, label in enumerate(labels):
+        stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, label, pick_ori="normal")
+        data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
+        n_verts, n_time, n_epochs = data.shape
+        data = data.reshape(n_verts, n_time * n_epochs)
+        U, S, V = np.linalg.svd(data, full_matrices=False)
+        flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
+        data = flip[:, np.newaxis] * data
+        data = np.median(data.reshape(n_verts, n_time, n_epochs), axis=0)
+        labels_data[index] = data
+        print(float(index) / len(labels) * 100)
+
+def epochs_to_labels_mne(epochs, labels, inv, lambda2 = 1.0 / (1.0 ** 2), method = 'MNE', mode='pca_flip'):
+    src = inv['src']
+    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, return_generator=True)
+    labels_data = mne.extract_label_time_course(stcs, labels, src, mode=mode)
+    labels_data = np.array(labels_data)
+    labels_data = np.transpose(labels_data, (1, 2, 0))
+    return labels_data
+
 
 def compute_psd(labels_data, sfreq=300):
     n_labels, n_time, n_epochs = labels_data.shape
@@ -108,60 +115,16 @@ def compute_psd(labels_data, sfreq=300):
     return labels_psd, freq
 
 
-def epochs_to_labels_mne(epochs, labels, inv, lambda2 = 1.0 / (3.0 ** 2), method = 'MNE', mode='pca_flip'):
-    src = inv['src']
-    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, return_generator=True)
-    labels_data = mne.extract_label_time_course(stcs, labels, src, mode=mode)
-    labels_data = np.array(labels_data)
-    labels_data = np.transpose(labels_data, (1, 2, 0))
-    return labels_data
 
+labels_data_pf = epochs_to_labels_mne(epochs, labels, inv, mode='pca_flip')
+labels_data_pfm = epochs_to_labels_mne(epochs, labels, inv, mode='pca_flip_mean')
+labels_data_pft = epochs_to_labels_mne(epochs, labels, inv, mode='pca_flip_truncated')
+labels_data_mf = epochs_to_labels_mne(epochs, labels, inv, mode='mean_flip')
+labels_data_sk = epochs_to_labels_sk(epochs, labels, inv)
 
-
-
-
-
-labels_data = hilbert(labels_data, axis=1)
-corr_mats = np.zeros((len(labels),len(labels), n_epochs))
-
-for index, label_data in enumerate(labels_data):
-    label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
-    label_data_orig = np.abs(label_data)
-    label_data_cont = np.transpose(np.dstack((label_data_orig,
-                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
-    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
-    print(float(index)/len(labels)*100)
-
-corr_mats = np.transpose(corr_mats,(2,0,1))
-
-corr = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
-                        for corr_mat in corr_mats]),axis=0)
-
-
-corr_mats = np.zeros((len(labels),len(labels), n_epochs))
-
-for index, label_data in enumerate(labels_data):
-    label_data_orth = np.imag(label_data*(labels_data.conj()/np.abs(labels_data)))
-    label_data_orig = np.abs(np.random.permutation(label_data))
-    label_data_cont = np.transpose(np.dstack((label_data_orig,
-                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
-    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
-    print(float(index)/len(labels)*100)
-
-corr_mats = np.transpose(corr_mats,(2,0,1))
-
-corr_surrogate = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
-                        for corr_mat in corr_mats]),axis=0)
-
-corr = np.int32(bct.utils.threshold_proportional(corr,.15) > 0)
-deg = bct.density_und(corr)
-
-stc = get_stc(labels_fname, deg)
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir)
-
-brain.save_image('beta_orthogonal_corr.png')
-
-
+labels_psd_pf, freq = compute_psd(labels_data_pf)
+labels_psd_pfm = compute_psd(labels_data_pfm)[0]
+labels_psd_pft = compute_psd(labels_data_pft)[0]
+labels_psd_mf = compute_psd(labels_data_mf)[0]
+labels_psd_sk = compute_psd(labels_data_sk)[0]
 
