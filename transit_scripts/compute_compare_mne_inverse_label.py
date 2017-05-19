@@ -40,7 +40,7 @@ inverse_operator = mne.minimum_norm.make_inverse_operator(
 labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label')]
 
 raw_label = compute_inverse_raw_label(raw, labels, inverse_operator,
-                                      label_mode='pca_flip')
+                                      label_mode='pca_flip_truncated')
 raw_label.rename_channels(
     dict(zip(raw_label.ch_names,
              ['l%03d' % ii for ii, _ in enumerate(raw_label.ch_names)])))
