@@ -75,7 +75,7 @@ src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
 bem = mne.read_bem_solution(bem_fname)
 src = mne.read_source_spaces(src_fname)
 
-fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=1)
+fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, cov,loose=0.2, depth=0.8)
 
 snr = 1.0  # use lower SNR for single epochs
@@ -105,12 +105,7 @@ for ind1 in np.arange(len(labels)):
 freq = stft(labels_data[ind1,:,ind2], 300)[0]
 
 
-def epochs_to_labels_mne(epochs, subj_labels, inv, lambda2 = 1.0 / (3.0 ** 2), method = 'MNE', mode='pca_flip_mean'):
-    src = inv['src']
-    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, return_generator=True)
-    labels_data = mne.extract_label_time_course(stcs, labels, src, mode=mode)
-    labels_data = np.array(labels_data)
-    return labels_data
+
 
 
 
@@ -158,6 +153,3 @@ brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap=
                  surface='inflated10', subjects_dir=subjects_dir)
 
 brain.save_image('beta_orthogonal_corr.png')
-
-
-

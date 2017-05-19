@@ -555,7 +555,6 @@ def make_surrogates_empty_room(raw, fwd, inverse_operator, step=10000):
         out[picks, start:stop] = reprojected.data
     out = mne.io.RawArray(out, info=copy.deepcopy(raw.info))
     return out
-<<<<<<< HEAD
 
 
 def subsequences(sig, frameSize, overlapFac=0.75):
@@ -611,5 +610,4 @@ def stft(sig, fs, frameSize=None, overlapFac=0.75, window=np.hanning):
     freq = np.fft.rfftfreq(frameSize, d=1./fs)
     return freq, np.mean(np.abs(np.fft.rfft(frames)), axis=0)
 
-=======
->>>>>>> 73b05916d6081732c39b2e5cfc4629fd4d7be947
+
