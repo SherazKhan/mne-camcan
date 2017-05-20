@@ -4,7 +4,7 @@ import mne
 import bct
 import numpy as np
 
-corr = mne.externals.h5io.read_hdf5('beta_band_brain_power_envelopes.h5')['C']
+corr = mne.externals.h5io.read_hdf5('beta_band_brain_power_envelopes_beta_wide.h5')['C']
 corr = np.median(corr, axis=0)
 corr = np.int32(bct.utils.threshold_proportional(corr, .15) > 0)
 deg = bct.degrees_und(corr)
@@ -55,7 +55,8 @@ def get_stc(labels, data, tmin=0, tstep=1):
 
 stc_new = get_stc(labels, deg)
 
-
-brain = stc_new.plot(subject='fsaverage', time_viewer=True, hemi='split', colormap='gnuplot',
-                 views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir)
+brain = stc_new.plot(
+    subject='fsaverage', hemi='split', views=['med', 'lat'], colormap='gnuplot',
+    surface='inflated10', subjects_dir=subjects_dir, time_label=None)
+brain.scale_data_colormap(80, 120, 180, True)
+brain.save_image('ctf_brainstorm_wide_beta_.jpg')

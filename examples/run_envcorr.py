@@ -117,10 +117,6 @@ def epochs_to_labels_mne(epochs, labels, inv, lambda2 = 1.0 / (3.0 ** 2), method
     return labels_data
 
 
-
-
-
-
 labels_data = hilbert(labels_data, axis=1)
 corr_mats = np.zeros((len(labels),len(labels), n_epochs))
 

@@ -523,7 +523,7 @@ def compute_envelope_correllation(X):
         y = X[jj:]
         x_, y_ = _orthogonalize(a=x, b=y), _orthogonalize(a=y, b=x)
         this_corr = np.mean((
-            np.abs(compute_corr(np.abs(x), y_)),
+            np.abs(compute_corr(np.abs(x), y_)),  # take abs, sign is ambiguous?
             np.abs(compute_corr(np.abs(y), x_))), axis=0)
         corr[ii:jj, jj:] = this_corr
 
