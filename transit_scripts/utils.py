@@ -152,6 +152,9 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
         label_vertidx.append(this_vertidx)
 
     # mode-dependent initialization
+    mode_args = None
+    if isinstance(mode, tuple):
+        mode, mode_args = mode
     if mode == 'mean':
         pass  # we have this here to catch invalid values for mode
     elif mode in ('mean_flip', 'pca_flip', 'pca_flip_mean',
@@ -223,6 +226,8 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                         flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
 
         elif mode == 'pca_flip_truncated':
+            if mode_args is not None:
+                n_comps = mode_args
             for i, (vertidx, flip) in enumerate(zip(label_vertidx,
                                                     label_flip)):
                 if vertidx is not None:
@@ -234,23 +239,21 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                     # use average power in label for scaling
 
                     # determining component explaining 90 percent variance
-                    # n_comps = max(
-                    #     3, np.sum(s.cumsum() / s.cumsum().max() < .9))
-                    # print(n_comps)
-                    # XXX Sheraz see here scaling problem
-                    n_comps = 2
-                    s /= s[:n_comps].sum()
+                    if isinstance(n_comps, float):
+                        n_comps_ = np.sum(
+                            s.cumsum() / s.cumsum().max() <= n_comps)
+                        if n_comps_ == 0:
+                            raise ValueError(
+                                'You get zero components at %d percent explain'
+                                'ed variances. Make sure your artifact '
+                                'rejection was appropriate' % n_comps_)
+                    else:
+                        n_comps_ = n_comps
+
                     scale = linalg.norm(s) / np.sqrt(len(vertidx))
-                    weights = [1] * n_comps
-                    # weights = s[:n_comps]
+                    weights = s[:n_comps_] / s[:n_comps_].sum()
                     label_tc[i] = sign * scale * np.average(
-                        V[:n_comps], weights=weights, axis=0)
-                    #SK
-                    # n_comps = np.sum(s.cumsum() / s.cumsum().max() < .9)
-                    # n_comps = max(1, n_comps)
-                    # weights = s[:n_comps]/s[:n_comps].sum()
-                    # tc = weights[:,np.newaxis] * V[:n_comps]
-                    # label_tc[i] = sign * scale * tc.mean(0)
+                        V[:n_comps_], weights=weights, axis=0)
 
         elif mode == 'max':
             for i, vertidx in enumerate(label_vertidx):

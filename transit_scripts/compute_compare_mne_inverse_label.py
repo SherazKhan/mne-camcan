@@ -41,7 +41,7 @@ labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label'
 
 raw.filter(0.1, 100, l_trans_bandwidth=0.05)
 raw_label = compute_inverse_raw_label(raw, labels, inverse_operator,
-                                      label_mode='pca_flip_truncated')
+                                      label_mode=('pca_flip_truncated', 2))
 
 raw_label.get_data()
 raw_label.rename_channels(
