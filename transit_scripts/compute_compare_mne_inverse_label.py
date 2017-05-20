@@ -39,12 +39,21 @@ inverse_operator = mne.minimum_norm.make_inverse_operator(
 
 labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label')]
 
+raw.filter(0.1, 100, l_trans_bandwidth=0.05)
 raw_label = compute_inverse_raw_label(raw, labels, inverse_operator,
-                                      label_mode='pca_flip')
+                                      label_mode='pca_flip_truncated')
+
+raw_label.get_data()
 raw_label.rename_channels(
     dict(zip(raw_label.ch_names,
              ['l%03d' % ii for ii, _ in enumerate(raw_label.ch_names)])))
 
+import matplotlib
+%matplotlib inline
+raw_label.plot_psd(fmin=2, fmax=60, n_fft=8912, n_overlap=4096, average=False, picks=list(range(448)))
+
+import numpy as np
+np.average
 raw_label.save('labels_aparc_sk_broadband_raw.fif', overwrite=True)
 
 del raw_label

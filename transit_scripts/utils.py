@@ -154,13 +154,8 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
     # mode-dependent initialization
     if mode == 'mean':
         pass  # we have this here to catch invalid values for mode
-    elif mode == 'mean_flip':
-        # get the sign-flip vector for every label
-        label_flip = _get_label_flip(labels, label_vertidx, src[:2])
-    elif mode == 'pca_flip':
-        # get the sign-flip vector for every label
-        label_flip = _get_label_flip(labels, label_vertidx, src[:2])
-    elif mode == 'pca_flip_mean':
+    elif mode in ('mean_flip', 'pca_flip', 'pca_flip_mean',
+                  'pca_flip_truncated'):
         # get the sign-flip vector for every label
         label_flip = _get_label_flip(labels, label_vertidx, src[:2])
     elif mode == 'max':
@@ -215,8 +210,8 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
 
                     label_tc[i] = sign * scale * V[0]
         elif mode == 'pca_flip_mean':
-            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
-                                                    label_flip)):
+            for i, (vertidx, _) in enumerate(zip(label_vertidx,
+                                                 label_flip)):
                 if vertidx is not None:
                     U, s, V = linalg.svd(stc.data[vertidx, :],
                                          full_matrices=False)
@@ -226,6 +221,31 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                         flip_refrence, stc.data[vertidx, :]))[1:, 0]
                     label_tc[i] = np.median(
                         flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
+
+        elif mode == 'pca_flip_truncated':
+            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
+                                                    label_flip)):
+                if vertidx is not None:
+                    U, s, V = linalg.svd(stc.data[vertidx, :],
+                                         full_matrices=False)
+                    # determine sign-flip
+                    sign = np.sign(np.dot(U[:, 0], flip))
+
+                    # use average power in label for scaling
+
+                    # determining component explaining 90 percent variance
+                    # n_comps = max(
+                    #     3, np.sum(s.cumsum() / s.cumsum().max() < .9))
+                    # print(n_comps)
+                    # XXX Sheraz see here scaling problem
+                    n_comps = 2
+                    s /= s[:n_comps].sum()
+                    scale = linalg.norm(s) / np.sqrt(len(vertidx))
+                    weights = [1] * n_comps
+                    # weights = s[:n_comps]
+                    label_tc[i] = sign * scale * np.average(
+                        V[:n_comps], weights=weights, axis=0)
+
         elif mode == 'max':
             for i, vertidx in enumerate(label_vertidx):
                 if vertidx is not None:
