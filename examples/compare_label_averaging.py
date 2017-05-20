@@ -123,11 +123,11 @@ labels_psd_pft = compute_psd(labels_data_pft)[0]
 labels_psd_mf = compute_psd(labels_data_mf)[0]
 labels_psd_sk = compute_psd(labels_data_sk)[0]
 
-plt.figure();plt.plot(freq[18:], np.mean(labels_psd_pf,1).T[18:]);plt.title('pca flip');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.mean(labels_psd_pfm,1).T[18:]);plt.title('pca flip mean');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.mean(labels_psd_pft,1).T[18:]);plt.title('pca flip truncated');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.mean(labels_psd_mf,1).T[18:]);plt.title('Matti flip');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.mean(labels_psd_sk,1).T[18:]);plt.title('Sheraz flip');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pf,1).T[18:]);plt.title('pca flip');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pfm,1).T[18:]);plt.title('pca flip mean');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pft,1).T[18:]);plt.title('pca flip truncated');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_mf,1).T[18:]);plt.title('Matti flip');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_sk,1).T[18:]);plt.title('Sheraz flip');plt.xlim(2.5, 90)
 
 
 

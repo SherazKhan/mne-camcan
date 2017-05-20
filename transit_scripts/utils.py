@@ -245,6 +245,12 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                     # weights = s[:n_comps]
                     label_tc[i] = sign * scale * np.average(
                         V[:n_comps], weights=weights, axis=0)
+                    #SK
+                    # n_comps = np.sum(s.cumsum() / s.cumsum().max() < .9)
+                    # n_comps = max(1, n_comps)
+                    # weights = s[:n_comps]/s[:n_comps].sum()
+                    # tc = weights[:,np.newaxis] * V[:n_comps]
+                    # label_tc[i] = sign * scale * tc.mean(0)
 
         elif mode == 'max':
             for i, vertidx in enumerate(label_vertidx):
