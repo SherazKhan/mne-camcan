@@ -531,30 +531,31 @@ def compute_envelope_correllation(X):
     return corr + corr.T  # mirror lower diagonal
 
 
-def make_envelope_correllation(stcs, duration, overlap, stop, sfreq):
+def make_envelope_correllation(raw_label, duration, overlap, stop, fmin, fmax):
 
-    label_names = [str(k) for k in range(len(stcs))]
-    n_labels = len(label_names)
+    picks = [ii for ii, ch in enumerate(raw_label.ch_names) if
+             ch.startswith('L')]
+    raw_label = raw_label.copy().filter(
+        fmin, fmax, l_trans_bandwidth=0.5, h_trans_bandwidth=0.5,
+        fir_design='firwin', filter_length='auto', phase='zero',
+        fir_window='hann', picks=picks)
+    n_labels = len(picks)
+    raw_label.apply_hilbert(envelope=False, picks=picks)
 
-    info = mne.create_info(
-        ch_names=label_names, sfreq=sfreq, ch_types=['misc'] * len(stcs))
-    for ch in info['chs']:
-        ch['unit'] = FIFF.FIFF_UNIT_AM
-        ch['unit_mul'] = FIFF.FIFF_UNIT_NONE
+    if stop is None:
+        stop = ((raw_label.last_samp - raw_label.first_samp) /
+                raw_label.info['sfreq'])
 
-    stcs = mne.io.RawArray(stcs, info)
-    stcs.apply_hilbert(envelope=False, picks=list(range(n_labels)))
+    events = mne.make_fixed_length_events(
+        raw_label, id=3000, duration=overlap, start=0,
+        stop=stop-duration)
 
-    events = make_overlapping_events(stcs, 3000, duration=duration,
-                                     overlap=overlap, stop=stop)
-
-    stcs = mne.Epochs(stcs, events=events, tmin=0, tmax=duration,
-                      baseline=None, reject=None, preload=True)
-
-    env_corrs = np.empty((len(stcs), n_labels, n_labels),
+    epochs_label = mne.Epochs(raw_label, events=events, tmin=0, tmax=duration,
+                              baseline=None, reject=None, preload=True)
+    env_corrs = np.empty((len(epochs_label), n_labels, n_labels),
                          dtype=np.float)
 
-    for ii, stc_epoch in enumerate(stcs):
-        env_corrs[ii] = compute_envelope_correllation(stc_epoch)
+    for ii, epoch_label in enumerate(epochs_label):
+        env_corrs[ii] = compute_envelope_correllation(epoch_label)
 
     return env_corrs
