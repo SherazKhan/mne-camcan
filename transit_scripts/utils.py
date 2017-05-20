@@ -218,10 +218,15 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                 if vertidx is not None:
                     U, s, V = linalg.svd(stc.data[vertidx, :],
                                          full_matrices=False)
-                    # determine sign-flip
-                    flip_refrence = V[0]
+                    # determine sign-flip by aligning data to positively
+                    # correlate with PCA 1
+                    sign = np.sign(np.dot(U[:, 0], flip))
+ 
+                    # use average power in label for scaling
+                    scale = linalg.norm(s) / np.sqrt(len(vertidx))
+                    flip_reference = sign * scale * V[0]
                     flip = np.sign(np.corrcoef(
-                        flip_refrence, stc.data[vertidx, :]))[1:, 0]
+                        flip_reference, stc.data[vertidx, :]))[1:, 0]
                     label_tc[i] = np.median(
                         flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
 

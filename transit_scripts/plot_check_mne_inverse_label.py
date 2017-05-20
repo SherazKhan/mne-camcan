@@ -1,4 +1,5 @@
-# cd github/mne-camcan/transit_scripts/
+# cd transit_scripts/
+import glob
 import os.path as op
 from mne.datasets.brainstorm import bst_resting
 import mne
@@ -9,9 +10,6 @@ from utils import (
 mne.utils.set_log_level('warning')
 
 data_path = bst_resting.data_path()
-raw_fname = op.join(
-    data_path,
-    'MEG/bst_resting/subj002_spontaneous_20111102_02_AUX_raw.fif')
 
 raw_noise_fname = op.join(
     data_path,
@@ -25,44 +23,23 @@ meg_dir = op.expanduser(
 
 spacing = 'ico5'
 
-proj_fname = op.join(meg_dir, subject, 'bst_resting_ecg-eog-proj.fif')
 noise_cov_fname = op.join(
     meg_dir, subject, '%s-%s-cov.fif' % (subject, spacing))
 fwd_fname = op.join(meg_dir, subject, '%s_%s-fwd.fif' % (subject, spacing))
 
-raw = mne.io.read_raw_fif(raw_fname)
-projs = mne.read_proj(proj_fname)
-raw.add_proj(projs)
-raw.rename_channels(
-    dict(zip(raw.ch_names, mne.utils._clean_names(raw.ch_names))))
+raw = mne.io.read_raw_fif('brainstorm_testing_rest_raw.fif')
 raw.load_data()
-raw.pick_types(meg=True, eeg=False, ref_meg=False)
-
+raw.pick_types(meg=True, eeg=False)
 fwd = mne.read_forward_solution(fwd_fname)
 src = fwd['src']
 noise_cov = mne.read_cov(noise_cov_fname)
 
-for comp in raw.info['comps']:
-    for key in ('row_names', 'col_names'):
-        comp['data'][key] = mne.utils._clean_names(comp['data'][key])
-
 inverse_operator = mne.minimum_norm.make_inverse_operator(
     raw.info, forward=fwd, noise_cov=noise_cov)
 
-labels = mne.read_labels_from_annot(
-    parc='aparc_sk', subject='fsaverage', subjects_dir=subjects_dir)
+labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label')]
 
-labels = [ll for ll in labels if 'unknown' not in ll.name]
-for label in labels:
-    label.morph(subject_to=subject, subjects_dir=subjects_dir)
-raw.info['sfreq']
-decimate_raw(raw, decim=9)
-
-raw.filter(.1, 100, l_trans_bandwidth=0.05, h_trans_bandwidth=1,
-           filter_length='auto', phase='zero', fir_window='hann')
-
-import matplotlib.pyplot as plt
-%matplotlib inline
+raw.filter(0.1, 100, l_trans_bandwidth=0.05)
 
 raws_label = dict()
 for method in ['pca_flip_mean', 'mean_flip', 'pca_flip']:
