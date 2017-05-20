@@ -6,17 +6,17 @@ subjects_dir = op.expanduser(
     '~/mne_data/MNE-brainstorm-data/bst_resting/subjects')
 
 duration = 30.
-stop = 100.
-overlap = 30.
+stop = None
+overlap = 8.
 
 raw_label = mne.io.read_raw_fif('labels_aparc_sk_broadband_raw.fif', preload=True)
 
 env_corr = make_envelope_correllation(
-    raw_label=raw_label, duration=duration, overlap=overlap, stop=stop, fmin=13, fmax=20)
+    raw_label=raw_label, duration=duration, overlap=overlap, stop=stop, fmin=13, fmax=30)
 
-# env_corr[0].flat[::len(env_corr[0]) + 1] = 0.
-#
 import matplotlib.pyplot as plt
 import numpy as np
-plt.matshow(np.abs(env_corr[0]), cmap='viridis')
+plt.matshow(np.abs(env_corr.mean(0)), cmap='viridis')
 plt.colorbar()
+
+mne.externals.h5io.write_hdf5('beta_band_brain_power_envelopes_beta_wide.h5', {'band': 'beta', 'C': env_corr})
