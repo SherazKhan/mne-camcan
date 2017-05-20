@@ -213,20 +213,27 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
 
                     label_tc[i] = sign * scale * V[0]
         elif mode == 'pca_flip_mean':
-            for i, (vertidx, _) in enumerate(zip(label_vertidx,
+            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
                                                  label_flip)):
                 if vertidx is not None:
                     U, s, V = linalg.svd(stc.data[vertidx, :],
                                          full_matrices=False)
-                    # determine sign-flip by aligning data to positively
-                    # correlate with PCA 1
+                    # first determine sign-flip from geometry
+                    # this is data independent and has a defined sign
                     sign = np.sign(np.dot(U[:, 0], flip))
- 
+
                     # use average power in label for scaling
                     scale = linalg.norm(s) / np.sqrt(len(vertidx))
                     flip_reference = sign * scale * V[0]
+                    # this is where pca_flip stops
+                    # but we move one and find how each vertex is
+                    # correlated with PCA 1.
+                    # while this is consistent, the sign itself depends on the
+                    # geometry *and* the PCA, so it will be arbitrary
+                    # which is true for any PCA method here.
                     flip = np.sign(np.corrcoef(
                         flip_reference, stc.data[vertidx, :]))[1:, 0]
+                    # and then use the resulting flip map for robust averaging
                     label_tc[i] = np.median(
                         flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
 
