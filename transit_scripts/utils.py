@@ -246,26 +246,23 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                     U, s, V = linalg.svd(stc.data[vertidx, :],
                                          full_matrices=False)
                     # determine sign-flip
-                    sign = np.sign(np.dot(U[:, 0], flip))
-
                     # use average power in label for scaling
 
                     # determining component explaining 90 percent variance
                     if isinstance(n_comps, float):
+                        s_ = s ** 2
                         n_comps_ = np.sum(
-                            s.cumsum() / s.cumsum().max() <= n_comps)
-                        if n_comps_ == 0:
-                            raise ValueError(
-                                'You get zero components at %d percent explain'
-                                'ed variances. Make sure your artifact '
-                                'rejection was appropriate' % n_comps_)
+                            s_.cumsum() / s_.cumsum().max() <= n_comps)
+                        n_comps_ = max(1, n_comps_)
+                        # if n_comps_ == 0:
+                            # raise ValueError(
+                            #     'You get zero components at %d percent explain'
+                            #     'ed variances. Make sure your artifact '
+                            #     'rejection was appropriate' % n_comps_)
                     else:
                         n_comps_ = n_comps
-
-                    scale = linalg.norm(s) / np.sqrt(len(vertidx))
-                    weights = s[:n_comps_] / s[:n_comps_].sum()
-                    label_tc[i] = sign * scale * np.average(
-                        V[:n_comps_], weights=weights, axis=0)
+                    y_t = np.dot(U[:, :n_comps_] * s[:n_comps_], V[:n_comps_])
+                    label_tc[i] = np.mean(flip * y_t, axis=0)
 
         elif mode == 'max':
             for i, vertidx in enumerate(label_vertidx):

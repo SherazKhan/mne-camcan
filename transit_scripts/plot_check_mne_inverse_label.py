@@ -3,7 +3,7 @@ import glob
 import os.path as op
 from mne.datasets.brainstorm import bst_resting
 import mne
-
+import numpy as np
 from utils import (
     decimate_raw, make_surrogates_empty_room, compute_inverse_raw_label)
 
@@ -31,9 +31,6 @@ fwd = mne.read_forward_solution(fwd_fname)
 src = fwd['src']
 noise_cov = mne.read_cov(noise_cov_fname)
 
-inverse_operator = mne.minimum_norm.make_inverse_operator(
-    raw.info, forward=fwd, noise_cov=noise_cov)
-
 labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label')]
 
 raw = mne.io.read_raw_fif('brainstorm_testing_rest_raw.fif')
@@ -42,38 +39,33 @@ raw.pick_types(meg=True, eeg=False)
 raw.filter(0.05, 100, l_trans_bandwidth=0.05, h_trans_bandwidth=1,
            fir_design='firwin', filter_length='auto', phase='zero', fir_window='hann')
 
+inverse_operator = mne.minimum_norm.make_inverse_operator(
+    raw.info, forward=fwd, noise_cov=noise_cov)
+
 import matplotlib.pyplot as plt
-%matplotlib inline
-plt.plot(raw.get_data().mean(0))
+
 raws_label = dict()
-methods = ['pca_flip_mean',
-           'mean_flip',
-           'pca_flip',
-           ('pca_flip_truncated', .9),
-           ('pca_flip_truncated', 3)]
+methods = [
+    ('pca_flip_truncated', .99),
+    ('pca_flip_truncated', 3),
+    ('pca_flip_truncated', 1),
+    'pca_flip',
+    'mean_flip',
+    'pca_flip_mean'
+]
 
 for method in methods:
     raws_label[method] = compute_inverse_raw_label(
         raw, labels, inverse_operator, label_mode=method)
 
-event_id = 1
-event_overlap = 8
-event_length = 30
-raw_length = (raw.last_samp - raw.first_samp) / raw.info['sfreq']
+# event_id = 1
+# event_overlap = 8
+# event_length = 30
+# raw_length = (raw.last_samp - raw.first_samp) / raw.info['sfreq']
+# 
+# events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap,
+#                                       start=0, stop=raw_length-event_length)
 
-events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap,
-                                      start=0, stop=raw_length-event_length)
-
-fig, axes = plt.subplots(len(methods), 1, sharey=True, sharex=True, figsize=(10, 8))
-axes = axes.ravel()
-ax = axes[ii]
-# x = raws_label[method].get_data().mean(0)
-if isinstance(method, tuple):
-    label = method[0] + str(method[1])
-else:
-    label = method
-    
-colors = plt.cm.Set2(np.arange(len(methods)))
 X_psds_raws = dict()
 for ii, method in enumerate(methods):
 
@@ -84,19 +76,19 @@ for ii, method in enumerate(methods):
     X_psd = 10 * np.log10(psds ** 2)
     X_psds_raws[method] = (X_psd, freqs)
 
-X_psds_epochs = dict()
-for ii, method in enumerate(methods):
-    epochs = mne.Epochs(
-        raws_label[method], events, event_id, tmin=0,
-        tmax=event_length, baseline=None, preload=True, proj=False, reject=None,
-        picks=list(range(448)))
-
-    psds, freqs = mne.time_frequency.psd_welch(
-        epochs, picks=list(range(448)), n_fft=4096, n_overlap=4096 / 2,
-        fmin=0, fmax=150)
-
-    X_psd = 10 * np.log10(psds ** 2).mean(0)
-    X_psds_epochs[method] = (X_psd, freqs)
+# X_psds_epochs = dict()
+# for ii, method in enumerate(methods):
+#     epochs = mne.Epochs(
+#         raws_label[method], events, event_id, tmin=0,
+#         tmax=event_length, baseline=None, preload=True, proj=False, reject=None,
+#         picks=list(range(448)))
+# 
+#     psds, freqs = mne.time_frequency.psd_welch(
+#         epochs, picks=list(range(448)), n_fft=4096, n_overlap=4096 / 2,
+#         fmin=0, fmax=150)
+# 
+#     X_psd = 10 * np.log10(psds ** 2).mean(0)
+#     X_psds_epochs[method] = (X_psd, freqs)
 
 
 label_colors = {ll.name: ll.color for ll in mne.read_labels_from_annot(
@@ -135,37 +127,38 @@ def set_foregroundcolor(ax, color):
 
 
 for method in methods:
-    fig, axes = plt.subplots(1, 2, figsize=(10, 6), sharey=True, sharex=True)
+    fig, axes = plt.subplots(1, 1, figsize=(6, 5), sharey=True, sharex=True)
     fig.patch.set_facecolor('black')
-    ax1, ax2 = axes.ravel()
-    ax1.set_axis_bgcolor('black')
+    ax2 = axes
     ax2.set_axis_bgcolor('black')
-    set_foregroundcolor(ax1, 'white')
+    # ax2.set_axis_bgcolor('black')
     set_foregroundcolor(ax2, 'white')
-    X_psd, freqs = X_psds_epochs[method]
-    for ii, label in enumerate(labels):
-        color = label_colors[label.name]
-        ax1.plot(freqs, X_psd[ii], color=color, alpha=0.3)
+    # set_foregroundcolor(ax2, 'white')
+    # X_psd, freqs = X_psds_epochs[method]
+    # for ii, label in enumerate(labels):
+    #     color = label_colors[label.name]
+    #     ax1.plot(freqs, X_psd[ii], color=color, alpha=0.3)
     X_psd, freqs = X_psds_raws[method]
     for ii, label in enumerate(labels):
         color = label_colors[label.name]
-        ax2.semilogx(freqs, X_psd[ii], color=color, alpha=0.3)
-    ax1.set_title('epochs')
-    ax2.set_title('raw')
+        ax2.plot(np.log10(freqs), X_psd[ii], color=color, alpha=0.1)
+    # ax1.set_title('epochs')
+    # ax2.set_title('raw')
     fig.suptitle(method, color='white')
     if isinstance(method, tuple):
         method_ = method[0] + str(method[1])
     else:
         method_ = method
-    ax1.set_ylim(-550, -400)
+    # ax1.set_ylim(-550, -400)
     ax2.set_ylim(-550, -400)
-    fig.savefig('epochs_raw_comp_%s.png' % method_, dpi=300,
+    fig.savefig('raw_comp_%s.png' % method_, dpi=300,
                 facecolor=fig.get_facecolor(), edgecolor='none')
 
 from scipy import linalg
 cov_dict = {method: np.cov(raws_label[method].get_data()) for method in methods}
+
 plt.figure(figsize=(8, 6))
-colors = plt.cm.Set2(np.arange(len(methods)))
+colors = plt.cm.Set2(np.arange(len(methods)) / float(len(methods)))
 for ii, method in enumerate(methods):
     cov = cov_dict[method]
     U, s, V = linalg.svd(cov, full_matrices=False)
@@ -182,7 +175,6 @@ plt.savefig('eigen_spectra_methods.png', dpi=300)
 
 
 plt.figure(figsize=(8, 6))
-colors = plt.cm.Set2(np.arange(len(methods)))
 for ii, method in enumerate(methods):
     x = raws_label[method].get_data().mean(0)
     if isinstance(method, tuple):
