@@ -31,6 +31,7 @@ fwd = mne.read_forward_solution(fwd_fname)
 src = fwd['src']
 noise_cov = mne.read_cov(noise_cov_fname)
 
+
 labels = [mne.read_label(fpath) for fpath in glob.glob('./testing_labels/*label')]
 
 raw = mne.io.read_raw_fif('brainstorm_testing_rest_raw.fif')
@@ -56,7 +57,7 @@ methods = [
 
 for method in methods:
     raws_label[method] = compute_inverse_raw_label(
-        raw, labels, inverse_operator, label_mode=method)
+        raw, labels, inverse_operator, label_mode=method, stop=None)
 
 # event_id = 1
 # event_overlap = 8
@@ -65,7 +66,7 @@ for method in methods:
 # 
 # events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap,
 #                                       start=0, stop=raw_length-event_length)
-
+plt.plot(raws_label[('pca_flip_truncated', .99)].get_data().mean(0))
 X_psds_raws = dict()
 for ii, method in enumerate(methods):
 
@@ -174,17 +175,7 @@ plt.ylabel('log10(s)')
 plt.savefig('eigen_spectra_methods.png', dpi=300)
 
 
-plt.figure(figsize=(8, 6))
-for ii, method in enumerate(methods):
-    x = raws_label[method].get_data().mean(0)
-    if isinstance(method, tuple):
-        method_ = method[0] + str(method[1])
-    else:
-        method_ = method
-    plt.psd(x, Fs=raw.info['sfreq'], NFFT=8196, label=method_, color=colors[ii], linewidth=3)
-plt.grid(True)
-plt.legend(loc='best')
-plt.savefig('mean_spectra_methods.png', dpi=300)
+ 
 
 # X_psds_epochs_sk = dict()
 # for ii, method in enumerate(methods):

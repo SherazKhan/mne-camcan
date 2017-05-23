@@ -183,94 +183,9 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                              'stc has %s vertices but the source space '
                              'has %s vertices'
                              % (stc.shape[0], sum(nvert)))
-
-        logger.info('Extracting time courses for %d labels (mode: %s)'
-                    % (n_labels, mode))
-
-        # do the extraction
-        label_tc = np.zeros((n_labels, stc.data.shape[1]),
-                            dtype=stc.data.dtype)
-        if mode == 'mean':
-            for i, vertidx in enumerate(label_vertidx):
-                if vertidx is not None:
-                    label_tc[i] = np.mean(stc.data[vertidx, :], axis=0)
-        elif mode == 'mean_flip':
-            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
-                                                    label_flip)):
-                if vertidx is not None:
-                    label_tc[i] = np.mean(flip * stc.data[vertidx, :], axis=0)
-        elif mode == 'pca_flip':
-            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
-                                                    label_flip)):
-                if vertidx is not None:
-                    U, s, V = linalg.svd(stc.data[vertidx, :],
-                                         full_matrices=False)
-                    # determine sign-flip
-                    sign = np.sign(np.dot(U[:, 0], flip))
-
-                    # use average power in label for scaling
-                    scale = linalg.norm(s) / np.sqrt(len(vertidx))
-
-                    label_tc[i] = sign * scale * V[0]
-        elif mode == 'pca_flip_mean':
-            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
-                                                 label_flip)):
-                if vertidx is not None:
-                    U, s, V = linalg.svd(stc.data[vertidx, :],
-                                         full_matrices=False)
-                    # first determine sign-flip from geometry
-                    # this is data independent and has a defined sign
-                    sign = np.sign(np.dot(U[:, 0], flip))
-
-                    # use average power in label for scaling
-                    scale = linalg.norm(s) / np.sqrt(len(vertidx))
-                    flip_reference = sign * scale * V[0]
-                    # this is where pca_flip stops
-                    # but we move one and find how each vertex is
-                    # correlated with PCA 1.
-                    # while this is consistent, the sign itself depends on the
-                    # geometry *and* the PCA, so it will be arbitrary
-                    # which is true for any PCA method here.
-                    flip = np.sign(np.corrcoef(
-                        flip_reference, stc.data[vertidx, :]))[1:, 0]
-                    # and then use the resulting flip map for robust averaging
-                    label_tc[i] = np.median(
-                        flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
-
-        elif mode == 'pca_flip_truncated':
-            if mode_args is not None:
-                n_comps = mode_args
-            for i, (vertidx, flip) in enumerate(zip(label_vertidx,
-                                                    label_flip)):
-                if vertidx is not None:
-                    U, s, V = linalg.svd(stc.data[vertidx, :],
-                                         full_matrices=False)
-                    # determine sign-flip
-                    # use average power in label for scaling
-
-                    # determining component explaining 90 percent variance
-                    if isinstance(n_comps, float):
-                        s_ = s ** 2
-                        n_comps_ = np.sum(
-                            s_.cumsum() / s_.cumsum().max() <= n_comps)
-                        n_comps_ = max(1, n_comps_)
-                        # if n_comps_ == 0:
-                            # raise ValueError(
-                            #     'You get zero components at %d percent explain'
-                            #     'ed variances. Make sure your artifact '
-                            #     'rejection was appropriate' % n_comps_)
-                    else:
-                        n_comps_ = n_comps
-                    y_t = np.dot(U[:, :n_comps_] * s[:n_comps_], V[:n_comps_])
-                    label_tc[i] = np.mean(flip * y_t, axis=0)
-
-        elif mode == 'max':
-            for i, vertidx in enumerate(label_vertidx):
-                if vertidx is not None:
-                    label_tc[i] = np.max(np.abs(stc.data[vertidx, :]), axis=0)
-        else:
-            raise ValueError('%s is an invalid mode' % mode)
-
+        label_tc = _gen_extract_label_time_course(
+            stc, mode, mode_args, n_labels, label_flip, label_vertidx)
+        # this is a generator!
         # extract label time series for the vol src space
         if len(src) > 2:
             v1 = nvert[0] + nvert[1]
@@ -282,9 +197,98 @@ def _gen_extract_label_time_course(stcs, labels, src, mode='mean',
                     label_tc[n_aparc + i] = np.mean(stc.data[v, :], axis=0)
 
                 v1 = v2
-
-        # this is a generator!
         yield label_tc
+
+
+def _get_label_time_course(stc, mode, mode_args,
+                           n_labels, label_flip, label_vertidx):
+    """get the time courses per label"""
+    logger.info('Extracting time courses for %d labels (mode: %s)'
+                % (n_labels, mode))
+    # do the extraction
+    label_tc = np.zeros((n_labels, stc.data.shape[1]),
+                        dtype=stc.data.dtype)
+    if mode == 'mean':
+        for i, vertidx in enumerate(label_vertidx):
+            if vertidx is not None:
+                label_tc[i] = np.mean(stc.data[vertidx, :], axis=0)
+    elif mode == 'mean_flip':
+        for i, (vertidx, flip) in enumerate(zip(label_vertidx,
+                                                label_flip)):
+            if vertidx is not None:
+                label_tc[i] = np.mean(flip * stc.data[vertidx, :], axis=0)
+    elif mode == 'pca_flip':
+        for i, (vertidx, flip) in enumerate(zip(label_vertidx,
+                                                label_flip)):
+            if vertidx is not None:
+                U, s, V = linalg.svd(stc.data[vertidx, :],
+                                     full_matrices=False)
+                # determine sign-flip
+                sign = np.sign(np.dot(U[:, 0], flip))
+
+                # use average power in label for scaling
+                scale = linalg.norm(s) / np.sqrt(len(vertidx))
+
+                label_tc[i] = sign * scale * V[0]
+    elif mode == 'pca_flip_mean':
+        for i, (vertidx, flip) in enumerate(zip(label_vertidx,
+                                                label_flip)):
+            if vertidx is not None:
+                U, s, V = linalg.svd(stc.data[vertidx, :],
+                                     full_matrices=False)
+                # first determine sign-flip from geometry
+                # this is data independent and has a defined sign
+                sign = np.sign(np.dot(U[:, 0], flip))
+
+                # use average power in label for scaling
+                scale = linalg.norm(s) / np.sqrt(len(vertidx))
+                flip_reference = sign * scale * V[0]
+                # this is where pca_flip stops
+                # but we move one and find how each vertex is
+                # correlated with PCA 1.
+                # while this is consistent, the sign itself depends on the
+                # geometry *and* the PCA, so it will be arbitrary
+                # which is true for any PCA method here.
+                flip = np.sign(np.corrcoef(
+                    flip_reference, stc.data[vertidx, :]))[1:, 0]
+                # and then use the resulting flip map for robust averaging
+                label_tc[i] = np.median(
+                    flip[:, np.newaxis] * stc.data[vertidx, :], axis=0)
+
+    elif mode == 'pca_flip_truncated':
+        if mode_args is not None:
+            n_comps = mode_args
+        for i, (vertidx, flip) in enumerate(zip(label_vertidx,
+                                                label_flip)):
+            if vertidx is not None:
+                U, s, V = linalg.svd(stc.data[vertidx, :],
+                                     full_matrices=False)
+                # determine sign-flip
+                # use average power in label for scaling
+
+                # determining component explaining 90 percent variance
+                if isinstance(n_comps, float):
+                    s_ = s ** 2
+                    n_comps_ = np.sum(
+                        s_.cumsum() / s_.cumsum().max() <= n_comps)
+                    n_comps_ = max(1, n_comps_)
+                    # if n_comps_ == 0:
+                    # raise ValueError(
+                    #     'You get zero components at %d percent explain'
+                    #     'ed variances. Make sure your artifact '
+                    #     'rejection was appropriate' % n_comps_)
+                else:
+                    n_comps_ = n_comps
+                y_t = np.dot(U[:, :n_comps_] * s[:n_comps_], V[:n_comps_])
+                label_tc[i] = np.mean(flip * y_t, axis=0)
+
+    elif mode == 'max':
+        for i, vertidx in enumerate(label_vertidx):
+            if vertidx is not None:
+                label_tc[i] = np.max(np.abs(stc.data[vertidx, :]), axis=0)
+    else:
+        raise ValueError('%s is an invalid mode' % mode)
+    return label_tc
 
 
 def extract_label_time_course(stcs, labels, src, mode='mean_flip',
@@ -398,17 +402,23 @@ def _get_label_data(raw, labels, inverse_operator, step=10000,
     X_stc = np.empty((len(labels), n_source_times), dtype=np.float)
     index = np.arange(len(raw.times)).astype(int)
     sfreq = raw.info['sfreq'] / source_decim
-    src = inverse_operator['src']
+    src_ = inverse_operator['src']
     last = len(index)
-    # XXX return Raw here actually and call it `compute_inverse_raw`
+    if isinstance(label_mode, tuple):
+        mode, mode_args = label_mode
+
     for start in index[::step]:
         stop = start + min(step, last - start)
-        stc = mne.minimum_norm.apply_inverse_raw(
-            raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
-            stop=stop, pick_ori="normal")
         for label_idx, label in enumerate(labels):
-            tc = extract_label_time_course(
-                stc, label, src, mode=label_mode)
+            stc = mne.minimum_norm.apply_inverse_raw(
+                raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+                label=label,
+                stop=stop, pick_ori="normal")
+            label_flip = [mne.label.label_sign_flip(src=src_, label=label)[:, None]]
+            tc = _get_label_time_course(
+                stc, mode=mode, mode_args=mode_args,
+                n_labels=1, label_flip=label_flip,
+                label_vertidx=[Ellipsis])
             tc = tc[0, ::source_decim]
             start_target = int(start // source_decim)
             stop_target = int(stop // source_decim)
@@ -519,8 +529,9 @@ def compute_envelope_correllation(X):
         jj = ii + 1
         y = X[jj:]
         x_, y_ = _orthogonalize(a=x, b=y), _orthogonalize(a=y, b=x)
+        # take abs, sign is ambiguous?
         this_corr = np.mean((
-            np.abs(compute_corr(np.abs(x), y_)),  # take abs, sign is ambiguous?
+            np.abs(compute_corr(np.abs(x), y_)),
             np.abs(compute_corr(np.abs(y), x_))), axis=0)
         corr[ii:jj, jj:] = this_corr
 
