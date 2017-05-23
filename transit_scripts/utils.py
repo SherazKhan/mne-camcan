@@ -367,8 +367,73 @@ def extract_label_time_course(stcs, labels, src, mode='mean_flip',
     return label_tc
 
 
-def _get_label_data(raw, labels, inverse_operator, step=10000,
+def _get_label_data2(raw, labels, inverse_operator, step=10000,
                     source_decim=10, label_mode='pca_flip'):
+    """Create power envelopes for set of labels
+
+    .. note::
+        To safe memory, projection proceeds in non-overlapping sliding windows.
+
+    .. note::
+        This can take some time (scales linearly with number of samples,
+        time points and dipoles).
+
+    Parameters
+    ----------
+    raw : instance of mne.io.Raw
+        The raw data (empty room).
+    labels : list of mne.Label objects
+        The labels to be visited
+    inverse_operator : mne.minimum_norm.InverseOperator
+        The inverse solution.
+    step : int (defaults to 10000)
+        The step size in sample when iterating over the raw object.
+    source_decim : int
+        The decimation factor on output data
+    label_mode : str (defaults to 'pca_flip')
+        The method to extract one time course from a label.
+
+    Returns
+    -------
+    X_surr : np.ndarray of shape(n_labels, n_times / source_decim)
+        The surrogate MEG data.
+    """
+    n_source_times = raw.get_data().shape[1] / source_decim
+    X_stc = np.empty((len(labels), n_source_times), dtype=np.float)
+    sfreq = raw.info['sfreq'] / source_decim
+    src_ = inverse_operator['src']
+    index = np.arange(len(raw.times)).astype(int)
+    last = len(index)
+    if isinstance(label_mode, tuple):
+        mode, mode_args = label_mode
+    else:
+        mode = label_mode
+        mode_args = None
+    if step is None:
+        step = len(index)
+
+    for start in index[::step]:
+        stop = start + min(step, last - start)
+        for label_idx, label in enumerate(labels):
+            stc = mne.minimum_norm.apply_inverse_raw(
+                raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+                label=label, stop=stop, pick_ori="normal")
+            label_flip = [
+                mne.label.label_sign_flip(src=src_, label=label)[:, None]]
+            tc = _get_label_time_course(
+                stc, mode=mode, mode_args=mode_args,
+                n_labels=1, label_flip=label_flip,
+                label_vertidx=[np.arange(len(stc.data)).astype(int)])
+            tc = tc[0, ::source_decim]
+            start_target = int(start // source_decim)
+            stop_target = int(stop // source_decim)
+            X_stc[label_idx][start_target:stop_target] = tc
+    return X_stc, sfreq
+
+
+def _get_label_data(raw, labels, inverse_operator, step=10000,
+                    source_decim=10, label_mode='pca_flip',
+                    original_src_params=None):
     """Create power envelopes for set of labels
 
     .. note::
@@ -402,23 +467,25 @@ def _get_label_data(raw, labels, inverse_operator, step=10000,
     X_stc = np.empty((len(labels), n_source_times), dtype=np.float)
     index = np.arange(len(raw.times)).astype(int)
     sfreq = raw.info['sfreq'] / source_decim
-    src_ = inverse_operator['src']
-    last = len(index)
-    if isinstance(label_mode, tuple):
-        mode, mode_args = label_mode
 
+    if original_src_params is not None:
+        src_ = original_src_params['src_orig']
+    else:
+        src_ = inverse_operator['src']
+
+    last = len(index)
+
+    # XXX return Raw here actually and call it `compute_inverse_raw`
     for start in index[::step]:
         stop = start + min(step, last - start)
+        stc = mne.minimum_norm.apply_inverse_raw(
+            raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
+            stop=stop, pick_ori="normal")
+        if original_src_params is not None:
+            stc = stc.to_original_src(**original_src_params)
         for label_idx, label in enumerate(labels):
-            stc = mne.minimum_norm.apply_inverse_raw(
-                raw, inverse_operator, lambda2=1.0, method='MNE', start=start,
-                label=label,
-                stop=stop, pick_ori="normal")
-            label_flip = [mne.label.label_sign_flip(src=src_, label=label)[:, None]]
-            tc = _get_label_time_course(
-                stc, mode=mode, mode_args=mode_args,
-                n_labels=1, label_flip=label_flip,
-                label_vertidx=[Ellipsis])
+            tc = extract_label_time_course(
+                stc, label, src_, mode=label_mode)
             tc = tc[0, ::source_decim]
             start_target = int(start // source_decim)
             stop_target = int(stop // source_decim)

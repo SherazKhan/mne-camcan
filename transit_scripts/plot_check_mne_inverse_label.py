@@ -48,16 +48,67 @@ import matplotlib.pyplot as plt
 raws_label = dict()
 methods = [
     ('pca_flip_truncated', .99),
-    ('pca_flip_truncated', 3),
-    ('pca_flip_truncated', 1),
+    # ('pca_flip_truncated', 3),
+    # ('pca_flip_truncated', 1),
     'pca_flip',
     'mean_flip',
     'pca_flip_mean'
 ]
 
+raw.times[::len(raw.times)]
+raw_label = compute_inverse_raw_label(
+    raw, labels, inverse_operator, label_mode='pca_flip_mean', step=None)
+
+
+
+psds, freqs = mne.time_frequency.psd_welch(
+    raw_label,
+    picks=list(range(448)), n_fft=4096, n_overlap=4096/2, fmin=0, fmax=150)
+
+psds, freqs = mne.time_frequency.psd_welch(
+    raw_label,
+    picks=list(range(448)), n_fft=4096, n_overlap=4096/2, fmin=0, fmax=150)
+
+X_psd = 10 * np.log10(psds ** 2)
+
+fig, axes = plt.subplots(1, 1, figsize=(6, 5), sharey=True, sharex=True)
+fig.patch.set_facecolor('black')
+ax2 = axes
+ax2.set_axis_bgcolor('black')
+# ax2.set_axis_bgcolor('black')
+set_foregroundcolor(ax2, 'white')
+# set_foregroundcolor(ax2, 'white')
+# X_psd, freqs = X_psds_epochs[method]
+# for ii, label in enumerate(labels):
+#     color = label_colors[label.name]
+#     ax1.plot(freqs, X_psd[ii], color=color, alpha=0.3)
+# X_psd, freqs = X_psd
+for ii, label in enumerate(labels):
+    color = label_colors[label.name]
+    ax2.plot(np.log10(freqs), X_psd[ii], color=color, alpha=0.1)
+# ax1.set_title('epochs')
+# ax2.set_title('raw')
+fig.suptitle('pca_flip_mean_new', color='white')
+if isinstance(method, tuple):
+    method_ = method[0] + str(method[1])
+else:
+    method_ = method
+# ax1.set_ylim(-550, -400)
+ax2.set_ylim(-550, -400)
+fig.savefig('raw_comp_%s.png' % 'pca_flip_mean_cont', dpi=300,
+            facecolor=fig.get_facecolor(), edgecolor='none')
+
+%matplotlib inline
+fig = raw_label.plot_psd(
+    fmin=0.1, fmax=100, n_fft=8912, picks=list(range(448)), average=False, area_alpha=0.01, n_overlap=4096,
+    xscale='log');
+
+fig.savefig('test.png', dpi=300)
+
 for method in methods:
     raws_label[method] = compute_inverse_raw_label(
-        raw, labels, inverse_operator, label_mode=method, stop=None)
+        raw, labels, inverse_operator, label_mode=method, step=None)
+    
 
 # event_id = 1
 # event_overlap = 8

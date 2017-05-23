@@ -35,6 +35,7 @@ raw_fname = op.join(
     data_path, 'rest', 'sub-' + subject,'meg', 'rest_raw.fif')
 raw = mne.io.read_raw_fif(raw_fname, preload=True)
 raw_length = (raw.last_samp-raw.first_samp)/raw.info['sfreq']
+
 raw.info['bads'] +=  [u'MEG2113', u'MEG1941', u'MEG1412', u'MEG2331']
 
 raw = mne.preprocessing.maxwell_filter(raw, calibration=cal,
