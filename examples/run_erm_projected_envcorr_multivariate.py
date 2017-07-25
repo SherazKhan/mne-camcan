@@ -9,9 +9,9 @@ from scipy.signal import hilbert
 from scipy.stats import ranksums
 from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
-import joblib
+from joblib import Parallel, delayed
 from camcan.utils import distcorr
-
+mne.set_log_level('WARNING')
 plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
@@ -111,10 +111,6 @@ src = mne.read_source_spaces(src_fname)
 fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, erm_cov,loose=0.2, depth=0.8)
 
-
-
-
-
 fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
 projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
 
@@ -130,34 +126,41 @@ projected_erm_epochs.resample(50.)
 
 
 
-snr = 1.0  # use lower SNR for single epochs
-lambda2 = 1.0 / snr ** 2
-method = "MNE"
+def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
+    lambda2 = 1.0 / snr ** 2
 
-corr_z =  np.zeros((len(labels), len(labels)))
+    stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+    data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+    stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+    data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+    corr_erm = np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)])
+
+    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+    data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+    data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+    corr_rest = np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)])
+
+    return ranksums(np.log10(corr_rest), np.log10(corr_erm))[0]
+
+counter = []
 for index1 in range(len(labels)-1):
     for index2 in range(index1+1,len(labels)):
+        counter.append((index1, index2))
 
-        stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
-        data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
-
-        stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
-        data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
-
-        corr_erm = [distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]
-
-        stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
-        data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
-
-        stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
-        data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
-
-        corr_rest = [distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]
-
-        corr_z[index1, index2] = ranksums(np.log10(corr_rest), np.log10(corr_erm))[0]
+corr_z = Parallel(n_jobs=20, verbose=5)(delayed(compute_zdistcor)(projected_erm_epochs, epochs, labels, index1, index2) for index1, index2 in counter[:20])
 
 
-corr_z = corr_z + corr_z.T
+corr_zz =  np.zeros((len(labels), len(labels)))
+for index in range(len(counter)):
+        corr_zz[counter[index]] = corr_z[index]
+
+
+corr_zz = corr_zz + corr_zz.T
 
 corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
 deg = bct.density_und(corr)
@@ -168,3 +171,46 @@ brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap=
                  surface='inflated10', subjects_dir=subjects_dir)
 
 brain.save_image('beta_orthogonal_corr.png')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
