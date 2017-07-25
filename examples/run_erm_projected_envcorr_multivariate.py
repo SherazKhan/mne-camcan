@@ -10,7 +10,7 @@ from scipy.stats import ranksums
 from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
 import joblib
-
+from camcan.utils import distcorr
 
 plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
@@ -111,25 +111,6 @@ src = mne.read_source_spaces(src_fname)
 fwd = mne.make_forward_solution(raw_fname, trans=trans_file, src=src, bem=bem, meg=True, eeg=False, n_jobs=2)
 inv = mne.minimum_norm.make_inverse_operator(raw.info, fwd, erm_cov,loose=0.2, depth=0.8)
 
-snr = 1.0  # use lower SNR for single epochs
-lambda2 = 1.0 / snr ** 2
-method = "MNE"
-n_epochs, n_chs, n_time = epochs._data.shape
-
-labels_data = np.zeros((len(labels), n_time, n_epochs))
-
-for index, label in enumerate(labels):
-    stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, label, pick_ori="normal")
-    data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
-    n_verts, n_time, n_epochs = data.shape
-    data = data.reshape(n_verts, n_time * n_epochs)
-    U, S, V = np.linalg.svd(data, full_matrices=False)
-    flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
-    data = flip[:, np.newaxis] * data
-    data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
-    labels_data[index] = data
-    print(float(index) / len(labels) * 100)
-
 
 
 
@@ -145,112 +126,45 @@ projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id,
                                                     stop=erm_raw_length-event_length)
 projected_erm_epochs = mne.Epochs(projected_erm_raw, projected_erm_events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-projected_erm_epochs.resample(100.)
-
-n_epochs, n_chs, n_time = projected_erm_epochs._data.shape
-
-labels_data_erm = np.zeros((len(labels), n_time, n_epochs))
-
-for index, label in enumerate(labels):
-    stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, label, pick_ori="normal")
-    data = np.transpose(np.array([stc.data for stc in stcs]), (1, 2, 0))
-    n_verts, n_time, n_epochs = data.shape
-    data = data.reshape(n_verts, n_time * n_epochs)
-    U, S, V = np.linalg.svd(data, full_matrices=False)
-    flip = np.array([np.sign(np.corrcoef(V[0,:],dat)[0, 1]) for dat in data])
-    data = flip[:, np.newaxis] * data
-    data = data.reshape(n_verts, n_time, n_epochs).mean(axis=0)
-    labels_data_erm[index] = data
-    print(float(index) / len(labels) * 100)
+projected_erm_epochs.resample(50.)
 
 
 
-
-labels_data_hipp = labels_data.copy()
-labels_data_hipp = hilbert(labels_data_hipp, axis=1)
-
-
-corr_mats = np.zeros((len(labels),len(labels), n_epochs))
-
-for index, label_data in enumerate(labels_data_hipp):
-    label_data_orth = np.imag(label_data*(labels_data_hipp.conj()/np.abs(labels_data_hipp)))
-    label_data_orig = np.abs(label_data)
-    label_data_cont = np.transpose(np.dstack((label_data_orig,
-                                          np.transpose(label_data_orth, (1, 2, 0)))), (1 ,2, 0))
-    corr_mats[index] = np.array([np.corrcoef(dat) for dat in label_data_cont])[:,0,1:].T
-    print(float(index)/len(labels)*100)
-
-corr_mats = np.transpose(corr_mats,(2,0,1))
-
-corr_hipp = np.median(np.array([(np.abs(corr_mat) + np.abs(corr_mat).T)/2.
-                        for corr_mat in corr_mats]),axis=0)
-
-
-
-
-labels_data = np.abs(hilbert(labels_data, axis=1))
-labels_data_erm = np.abs(hilbert(labels_data_erm, axis=1))
-
-labels_data = np.transpose(labels_data,(2,0,1))
-labels_data_erm = np.transpose(labels_data_erm,(2,0,1))
-
-corr_rest = np.abs([np.corrcoef(np.log10(dat)) for dat in labels_data])
-corr_erm = np.abs([np.corrcoef(np.log10(dat)) for dat in labels_data_erm])
+snr = 1.0  # use lower SNR for single epochs
+lambda2 = 1.0 / snr ** 2
+method = "MNE"
 
 corr_z =  np.zeros((len(labels), len(labels)))
-for index1 in range(len(labels)):
-    for index2 in range(len(labels)):
-        corr_z[index1, index2] = ranksums(np.log10(corr_rest[:, index1, index2]),np.log10(corr_erm[:, index1, index2]))[0]
-        print((index1, index2))
+for index1 in range(len(labels)-1):
+    for index2 in range(index1+1,len(labels)):
+
+        stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+        data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+        stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+        data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+        corr_erm = [distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]
+
+        stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+        data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+        stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+        data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+
+        corr_rest = [distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]
+
+        corr_z[index1, index2] = ranksums(np.log10(corr_rest), np.log10(corr_erm))[0]
 
 
-
-
-
-corr_rest_median = np.median(corr_rest,0)
-corr_erm_median = np.median(corr_erm,0)
-
-
-ll = [label_fname.split('/')[-1] for label_fname in labels_fname]
-
-temporal_labels_indices = [index  for index,l in enumerate(ll) if 'lh' in l and 'sup' in l and 'marginal' in l]
-
-
-
-
-data = {'corr_rest_median': corr_rest_median, 'corr_erm_median':corr_erm_median,
-        'corr_z':corr_z, 'corr_hipp':corr_hipp, 'labels_fname':labels_fname}
-
-hkl_fname = os.path.join(dir_path,'corrs.hkl')
-hkl.dump(data, hkl_fname)
-
-##
-projected_erm_cov = mne.compute_raw_covariance(projected_erm_raw, tmin=0, tmax=None)
-cov.plot(raw.info)
-erm_cov.plot(erm_raw.info)
-projected_erm_cov.plot(projected_erm_raw.info)
-
-corr_zz = corr_z.copy()
-
-corr_zz[corr_zz<0] = 0
-
-stc = get_stc(labels_fname, corr_z[temporal_labels_indices,:].mean(0))
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,7.5,10]})
-
-stc = get_stc(labels_fname, corr_rest_median[temporal_labels_indices,:].mean(0))
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[0,.5,1]})
-
+corr_z = corr_z + corr_z.T
 
 corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
-deg = bct.degrees_und(corr)
+deg = bct.density_und(corr)
 
-stc = get_stc(labels_fname, corr_z[254,:])
+stc = get_stc(labels_fname, deg)
 brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
                            views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir,clim={'kind':'value','lims':[5,6,7]})
+                 surface='inflated10', subjects_dir=subjects_dir)
 
-brain.save_image('beta_projected_erm_corr.png')
+brain.save_image('beta_orthogonal_corr.png')

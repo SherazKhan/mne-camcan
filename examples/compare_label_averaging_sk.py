@@ -35,7 +35,6 @@ raw_fname = op.join(
     data_path, 'rest', 'sub-' + subject,'meg', 'rest_raw.fif')
 raw = mne.io.read_raw_fif(raw_fname, preload=True)
 raw_length = (raw.last_samp-raw.first_samp)/raw.info['sfreq']
-
 raw.info['bads'] +=  [u'MEG2113', u'MEG1941', u'MEG1412', u'MEG2331']
 
 raw = mne.preprocessing.maxwell_filter(raw, calibration=cal,
@@ -66,6 +65,7 @@ epochs.resample(300.)
 
 bem_fname = op.join(bem_dir, '%s-src.fif' % subject)
 src_fname = op.join(bem_dir, '%s-src.fif' % spacing)
+
 bem = mne.read_bem_solution(bem_fname)
 src = mne.read_source_spaces(src_fname)
 
@@ -89,7 +89,6 @@ def epochs_to_labels_sk(epochs, labels, inv, lambda2 = 1.0 / (1.0 ** 2), method 
         labels_data[index] = data
         print(float(index) / len(labels) * 100)
     return labels_data
-
 
 
 def epochs_to_labels_mne(epochs, labels, inv, lambda2 = 1.0 / (1.0 ** 2), method = 'MNE', mode='pca_flip'):
@@ -123,11 +122,11 @@ labels_psd_pft = compute_psd(labels_data_pft)[0]
 labels_psd_mf = compute_psd(labels_data_mf)[0]
 labels_psd_sk = compute_psd(labels_data_sk)[0]
 
-plt.figure();plt.plot(freq[18:], np.median(labels_psd_pf,1).T[18:]);plt.title('pca flip');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.median(labels_psd_pfm,1).T[18:]);plt.title('pca flip mean');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.median(labels_psd_pft,1).T[18:]);plt.title('pca flip truncated');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.median(labels_psd_mf,1).T[18:]);plt.title('Matti flip');plt.xlim(2.5, 90)
-plt.figure();plt.plot(freq[18:], np.median(labels_psd_sk,1).T[18:]);plt.title('Sheraz flip');plt.xlim(2.5, 90)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pf,1).T[18:]);plt.title('pca flip');plt.xlim(2.5, 150)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pfm,1).T[18:]);plt.title('pca flip mean');plt.xlim(2.5, 150)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_pft,1).T[18:]);plt.title('pca flip truncated');plt.xlim(2.5, 150)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_mf,1).T[18:]);plt.title('Matti flip');plt.xlim(2.5, 150)
+plt.figure();plt.plot(freq[18:], np.median(labels_psd_sk,1).T[18:]);plt.title('Sheraz flip');plt.xlim(2.5, 150)
 
 
 
