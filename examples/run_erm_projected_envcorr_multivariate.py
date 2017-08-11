@@ -6,12 +6,18 @@ from mne.preprocessing import compute_proj_ecg, compute_proj_eog
 import glob
 import numpy as np
 from scipy.signal import hilbert
-from scipy.stats import ranksums
+from scipy.stats import ranksums, ttest_ind
 from camcan.utils import get_stc, make_surrogates_empty_room
 import bct
 from joblib import Parallel, delayed
 from camcan.utils import distcorr
 mne.set_log_level('WARNING')
+import joblib
+import os
+import pyprind
+from tqdm import tqdm
+import time
+from mne.label import read_labels_from_annot
 plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
 subject = subjects[0]
@@ -23,13 +29,15 @@ subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
-labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
+labels_fname  = glob.glob(op.join(data_path, 'label68', '*.label'))
 labels = [mne.read_label(label, subject='fsaverageSK', color='r')
           for label in labels_fname]
+# labels =read_labels_from_annot('fsaverage', 'aparc', 'both', subjects_dir=subjects_dir)
+# labels.pop(-1)
 for index, label in enumerate(labels):
     label.values.fill(1.0)
     labels[index] = label
-
+mne.set_config('SUBJECTS_DIR',subjects_dir)
 labels = [label.morph('fsaverageSK', subject, subjects_dir=subjects_dir) for label in labels]
 
 event_id = 1
@@ -54,7 +62,8 @@ raw.info['bads'] +=  [u'MEG2113', u'MEG1941', u'MEG1412', u'MEG2331']
 
 erm_raw_length = (erm_raw.last_samp-erm_raw.first_samp)/erm_raw.info['sfreq']
 erm_raw.info['bads'] +=  [u'MEG2113', u'MEG2112', u'MEG0512', u'MEG0141', u'MEG2533']
-
+raw.fix_mag_coil_types()
+erm_raw.fix_mag_coil_types()
 
 raw = mne.preprocessing.maxwell_filter(raw, calibration=cal,
                                        cross_talk=ctc,
@@ -124,18 +133,23 @@ projected_erm_epochs = mne.Epochs(projected_erm_raw, projected_erm_events, event
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
 projected_erm_epochs.resample(50.)
 
+counter = []
+for index1 in range(len(labels)-1):
+    for index2 in range(index1+1,len(labels)):
+        counter.append((index1, index2))
+
 
 
 def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
-    lambda2 = 1.0 / snr ** 2
 
+    lambda2 = 1.0 / snr ** 2
     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
     data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
 
     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
     data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
 
-    corr_erm = np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)])
+    corr_erm = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
 
     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
     data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
@@ -143,34 +157,116 @@ def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, metho
     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
     data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
 
-    corr_rest = np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)])
+    corr_rest = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
 
-    return ranksums(np.log10(corr_rest), np.log10(corr_erm))[0]
-
-counter = []
-for index1 in range(len(labels)-1):
-    for index2 in range(index1+1,len(labels)):
-        counter.append((index1, index2))
-
-corr_z = Parallel(n_jobs=20, verbose=5)(delayed(compute_zdistcor)(projected_erm_epochs, epochs, labels, index1, index2) for index1, index2 in counter[:20])
+    return ttest_ind(corr_rest, corr_erm)[0]
 
 
-corr_zz =  np.zeros((len(labels), len(labels)))
-for index in range(len(counter)):
-        corr_zz[counter[index]] = corr_z[index]
 
 
-corr_zz = corr_zz + corr_zz.T
 
-corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
-deg = bct.density_und(corr)
+def text_progessbar(seq, total=None):
+    step = 1
+    tick = time.time()
+    while True:
+        time_diff = time.time()-tick
+        avg_speed = time_diff/step
+        total_str = 'of %n' % total if total else ''
+        print('step', step, '%.2f' % time_diff, 'avg: %.2f iter/sec' % avg_speed, total_str)
+        step += 1
+        yield next(seq)
 
-stc = get_stc(labels_fname, deg)
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                           views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir)
+all_bar_funcs = {
+    'tqdm': lambda args: lambda x: tqdm(x, **args),
+    'txt': lambda args: lambda x: text_progessbar(x, **args),
+    'False': lambda args: iter,
+    'None': lambda args: iter,
+}
 
-brain.save_image('beta_orthogonal_corr.png')
+def ParallelExecutor(use_bar='tqdm', **joblib_args):
+    def aprun(bar=use_bar, **tq_args):
+        def tmp(op_iter):
+            if str(bar) in all_bar_funcs.keys():
+                bar_func = all_bar_funcs[str(bar)](tq_args)
+            else:
+                raise ValueError("Value %s not supported as bar type"%bar)
+            return Parallel(**joblib_args)(bar_func(op_iter))
+        return tmp
+    return aprun
+
+
+n_jobs = 72
+aprun = ParallelExecutor(n_jobs=n_jobs)
+corr_z = aprun(total=len(counter))(delayed(compute_zdistcor)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
+
+
+
+
+# corr_z = Parallel(n_jobs=8, verbose=5)(delayed(compute_zdistcor)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in tqdm(counter))
+#
+# corr_z = np.zeros((len(counter),))
+# for ind, index in enumerate(counter):
+#     #print('%.4f Percent Done'% (float(ind+1)/float(len(counter))*100))
+#     corr_z[ind] = compute_zdistcor(projected_erm_epochs, epochs, labels, index[0], index[1])
+
+
+data = {'corr_z': corr_z, 'labels':labels, 'counter':counter}
+
+pkl_fname = os.path.join(data_path,subject + '_corr_z.pkl')
+joblib.dump(data, pkl_fname)
+
+#
+#
+# corr_zz =  np.zeros((len(labels), len(labels)))
+# for index in range(len(counter)):
+#         corr_zz[counter[index]] = corr_z[index]
+#
+#
+# corr_zz = corr_zz + corr_zz.T
+#
+# corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
+# deg = bct.density_und(corr)
+#
+# stc = get_stc(labels_fname, deg)
+# brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+#                            views=['lateral','medial'],
+#                  surface='inflated10', subjects_dir=subjects_dir)
+#
+# brain.save_image('beta_orthogonal_corr.png')
+
+
+
+# def exact_mc_perm_test(xs, ys, nmc=10000):
+#     n, k = len(xs), 0
+#     diff = np.abs(ttest_ind(xs,ys)[0])
+#     zs = np.concatenate([xs, ys])
+#     for j in range(nmc):
+#         np.random.shuffle(zs)
+#         k += diff < np.abs(ttest_ind(zs[:n], zs[n:])[0])
+#     return k / float(nmc)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
