@@ -34,7 +34,7 @@ from scipy.spatial.distance import pdist, squareform
 
 
 
-def distcorr(Xval, Yval, pval=True, nruns=500):
+def distcorr(Xval, Yval, pval=True, nruns=1000):
     """ Compute the distance correlation function, returning the p-value.
     >>> a = [1,2,3,4,5]
     >>> b = np.array([1,2,9,4,4])

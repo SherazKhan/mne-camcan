@@ -17,6 +17,7 @@ import os
 import pyprind
 from tqdm import tqdm
 import time
+from mne.filter import resample, filter_data
 from mne.label import read_labels_from_annot
 plt.ion()
 subjects = ['CC110033', 'CC110037', 'CC110045']
@@ -29,7 +30,7 @@ subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
-labels_fname  = glob.glob(op.join(data_path, 'label68', '*.label'))
+labels_fname  = glob.glob(op.join(data_path, 'labels154', '*.label'))
 labels = [mne.read_label(label, subject='fsaverageSK', color='r')
           for label in labels_fname]
 # labels =read_labels_from_annot('fsaverage', 'aparc', 'both', subjects_dir=subjects_dir)
@@ -44,7 +45,7 @@ event_id = 1
 event_overlap = 8
 event_length = 30
 spacing='ico5'
-
+lf, hf = 14., 30.
 
 #def process_maxfilter(subject):
 raw_fname = op.join(
@@ -101,13 +102,13 @@ erm_raw.filter(None, 40, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
 
 erm_cov = mne.compute_raw_covariance(erm_raw, tmin=0, tmax=None)
 
-raw.filter(8, 12, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+raw.filter(lf, hf, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 reject = dict(grad=1000e-13, mag=1.2e-12)
 events = mne.make_fixed_length_events(raw, event_id, duration=event_overlap, start=0, stop=raw_length-event_length)
 epochs = mne.Epochs(raw, events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-epochs.resample(50.)
+epochs.resample(hf*3)
 
 
 
@@ -124,14 +125,14 @@ fwd_fixed = mne.convert_forward_solution(fwd, force_fixed=True)
 projected_erm_raw = make_surrogates_empty_room(erm_raw, fwd_fixed, inv, step=10000)
 
 
-projected_erm_raw.filter(8, 12, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
+projected_erm_raw.filter(lf, hf, l_trans_bandwidth='auto', h_trans_bandwidth='auto',
            filter_length='auto', phase='zero', fir_window='hann')
 projected_erm_events = mne.make_fixed_length_events(projected_erm_raw, event_id,
                                                     duration=event_overlap, start=0,
                                                     stop=erm_raw_length-event_length)
 projected_erm_epochs = mne.Epochs(projected_erm_raw, projected_erm_events, event_id, 0,
                     event_length, baseline=None, preload=True, proj=False, reject=reject)
-projected_erm_epochs.resample(50.)
+projected_erm_epochs.resample(hf*3)
 
 counter = []
 for index1 in range(len(labels)-1):
@@ -140,30 +141,61 @@ for index1 in range(len(labels)-1):
 
 
 
-def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
+# def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
+#
+#     lambda2 = 1.0 / snr ** 2
+#     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+#     data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+#
+#     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+#     data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+#
+#     corr_erm = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
+#
+#     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
+#     data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+#
+#     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
+#     data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+#
+#     corr_rest = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
+#     print(ttest_ind(corr_rest, corr_erm)[0])
+#     return ttest_ind(corr_rest, corr_erm)[0]
+
+
+def compute_zdistcor_resample(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
 
     lambda2 = 1.0 / snr ** 2
     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
-    data_label1 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+    data_label1 = np.abs(hilbert(np.array([stc.data for stc in stcs]), axis=2))
+    data_label1 = filter_data(data_label1, projected_erm_epochs.info['sfreq'], None, 2, fir_design="firwin2")
+    data_label1 = np.transpose(resample(data_label1, down=0.25*projected_erm_epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
     stcs = mne.minimum_norm.apply_inverse_epochs(projected_erm_epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
-    data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+    data_label2 = np.abs(hilbert(np.array([stc.data for stc in stcs]), axis=2))
+    data_label2 = filter_data(data_label2, projected_erm_epochs.info['sfreq'], None, 2, fir_design="firwin2")
+    data_label2 = np.transpose(resample(data_label2, down=0.25*projected_erm_epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
-    corr_erm = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
+    corr_erm =np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
 
     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
-    data_label1= np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+    data_label1 = np.abs(hilbert(np.array([stc.data for stc in stcs]), axis=2))
+    data_label1 = filter_data(data_label1, epochs.info['sfreq'], None, 2, fir_design="firwin2")
+    data_label1 = np.transpose(resample(data_label1, down=0.25*epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index2], pick_ori="normal")
-    data_label2 = np.abs(hilbert(np.transpose(np.array([stc.data for stc in stcs]), (0, 2, 1)), axis=1))
+    data_label2 = np.abs(hilbert(np.array([stc.data for stc in stcs]), axis=2))
+    data_label2 = filter_data(data_label2, epochs.info['sfreq'], None, 2, fir_design="firwin2")
+    data_label2 = np.transpose(resample(data_label2, down=0.25*epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
     corr_rest = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
 
+    print(ttest_ind(corr_rest, corr_erm)[0])
     return ttest_ind(corr_rest, corr_erm)[0]
 
 
 
-
+#from pyimpress.utils import ParallelExecutor
 
 def text_progessbar(seq, total=None):
     step = 1
@@ -195,9 +227,11 @@ def ParallelExecutor(use_bar='tqdm', **joblib_args):
     return aprun
 
 
-n_jobs = 72
+n_jobs = 225
 aprun = ParallelExecutor(n_jobs=n_jobs)
-corr_z = aprun(total=len(counter))(delayed(compute_zdistcor)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
+corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
+
+
 
 
 
@@ -209,12 +243,13 @@ corr_z = aprun(total=len(counter))(delayed(compute_zdistcor)(projected_erm_epoch
 #     #print('%.4f Percent Done'% (float(ind+1)/float(len(counter))*100))
 #     corr_z[ind] = compute_zdistcor(projected_erm_epochs, epochs, labels, index[0], index[1])
 
-
+#
 data = {'corr_z': corr_z, 'labels':labels, 'counter':counter}
 
-pkl_fname = os.path.join(data_path,subject + '_corr_z.pkl')
+pkl_fname = os.path.join(data_path,subject + '_lf_' + str(int(lf)) + '_hf_' + str(int(hf))+ '_labels_' + str(len(labels)) +'_corr_z.pkl')
 joblib.dump(data, pkl_fname)
 
+#
 #
 #
 # corr_zz =  np.zeros((len(labels), len(labels)))
@@ -224,13 +259,13 @@ joblib.dump(data, pkl_fname)
 #
 # corr_zz = corr_zz + corr_zz.T
 #
-# corr = np.int32(bct.utils.threshold_proportional(corr_z,.15) > 0)
-# deg = bct.density_und(corr)
+# corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
+# deg = np.array(bct.degrees_und(corr))
 #
 # stc = get_stc(labels_fname, deg)
 # brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
 #                            views=['lateral','medial'],
-#                  surface='inflated10', subjects_dir=subjects_dir)
+#                   surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
 #
 # brain.save_image('beta_orthogonal_corr.png')
 
@@ -246,11 +281,24 @@ joblib.dump(data, pkl_fname)
 #     return k / float(nmc)
 
 
-
-
-
-
-
+#
+# pkl_fname = os.path.join(data_path,subject + '_alpha_154_corr_z.pkl')
+# x = joblib.load(pkl_fname)
+# counter = x['counter']
+# labels = x['labels']
+# corr_z = x['corr_z']
+#
+# corr_zz =  np.zeros((len(labels), len(labels)))
+# for index in range(len(counter)):
+#     corr_zz[counter[index]] = corr_z[index]
+# corr_zz = corr_zz + corr_zz.T
+# corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
+# deg = np.array(bct.degrees_und(corr))
+# stc = get_stc(labels_fname, deg)
+# # #
+# # brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+# #                  views=['lateral','medial'],
+#                  surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
 
 
 
