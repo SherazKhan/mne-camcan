@@ -45,7 +45,7 @@ event_id = 1
 event_overlap = 8
 event_length = 30
 spacing='ico5'
-lf, hf = 14., 30.
+lf, hf = 8., 11.
 
 #def process_maxfilter(subject):
 raw_fname = op.join(
@@ -190,7 +190,6 @@ def compute_zdistcor_resample(projected_erm_epochs, epochs, labels, index1, inde
 
     corr_rest = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
 
-    print(ttest_ind(corr_rest, corr_erm)[0])
     return ttest_ind(corr_rest, corr_erm)[0]
 
 
@@ -227,7 +226,7 @@ def ParallelExecutor(use_bar='tqdm', **joblib_args):
     return aprun
 
 
-n_jobs = 225
+n_jobs = 235
 aprun = ParallelExecutor(n_jobs=n_jobs)
 corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
 
@@ -282,23 +281,23 @@ joblib.dump(data, pkl_fname)
 
 
 #
-# pkl_fname = os.path.join(data_path,subject + '_alpha_154_corr_z.pkl')
-# x = joblib.load(pkl_fname)
-# counter = x['counter']
-# labels = x['labels']
-# corr_z = x['corr_z']
-#
-# corr_zz =  np.zeros((len(labels), len(labels)))
-# for index in range(len(counter)):
-#     corr_zz[counter[index]] = corr_z[index]
-# corr_zz = corr_zz + corr_zz.T
-# corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
-# deg = np.array(bct.degrees_und(corr))
-# stc = get_stc(labels_fname, deg)
-# # #
-# # brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-# #                  views=['lateral','medial'],
-#                  surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
+pkl_fname = os.path.join(data_path, 'CC110033_lf_8_hf_11_labels_154_corr_z.pkl')
+x = joblib.load(pkl_fname)
+counter = x['counter']
+labels = x['labels']
+corr_z = x['corr_z']
+
+corr_zz =  np.zeros((len(labels), len(labels)))
+for index in range(len(counter)):
+    corr_zz[counter[index]] = corr_z[index]
+corr_zz = corr_zz + corr_zz.T
+corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
+deg = np.array(bct.degrees_und(corr))
+stc = get_stc(labels_fname, deg)
+# #
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                  views=['lateral','medial'],
+                 surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
 
 
 
