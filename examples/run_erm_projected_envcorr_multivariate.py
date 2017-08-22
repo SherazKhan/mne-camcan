@@ -30,7 +30,7 @@ subjects_dir = op.join(data_path,'recons')
 subject_dir = op.join(subjects_dir,subject)
 bem_dir = op.join(subject_dir,'bem')
 trans_file = op.join(data_path, 'trans',subject + '-trans.fif')
-labels_fname  = glob.glob(op.join(data_path, 'labels154', '*.label'))
+labels_fname  = glob.glob(op.join(data_path, 'labels', '*.label'))
 labels = [mne.read_label(label, subject='fsaverageSK', color='r')
           for label in labels_fname]
 # labels =read_labels_from_annot('fsaverage', 'aparc', 'both', subjects_dir=subjects_dir)
@@ -45,7 +45,7 @@ event_id = 1
 event_overlap = 8
 event_length = 30
 spacing='ico5'
-lf, hf = 8., 11.
+lf, hf = 14., 30.
 
 #def process_maxfilter(subject):
 raw_fname = op.join(
