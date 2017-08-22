@@ -14,7 +14,7 @@ from camcan.utils import distcorr
 mne.set_log_level('WARNING')
 import joblib
 import os
-import pyprind
+from scipy.spatial.distance import pdist, squareform
 from tqdm import tqdm
 import time
 from mne.filter import resample, filter_data
@@ -141,6 +141,23 @@ for index1 in range(len(labels)-1):
 
 
 
+
+def distcorr_n(X, Y):
+
+    n = X.shape[0]
+
+    a = squareform(pdist(X))
+    b = squareform(pdist(Y))
+    A = a - a.mean(axis=0)[None, :] - a.mean(axis=1)[:, None] + a.mean()
+    B = b - b.mean(axis=0)[None, :] - b.mean(axis=1)[:, None] + b.mean()
+
+    dcov2_xy = (A * B).sum() / float(n * n)
+    dcov2_xx = (A * A).sum() / float(n * n)
+    dcov2_yy = (B * B).sum() / float(n * n)
+    dcor = np.sqrt(dcov2_xy) / np.sqrt(np.sqrt(dcov2_xx) * np.sqrt(dcov2_yy))
+
+    return dcor
+
 # def compute_zdistcor(projected_erm_epochs, epochs, labels, index1, index2, method='MNE', snr=1):
 #
 #     lambda2 = 1.0 / snr ** 2
@@ -176,7 +193,7 @@ def compute_zdistcor_resample(projected_erm_epochs, epochs, labels, index1, inde
     data_label2 = filter_data(data_label2, projected_erm_epochs.info['sfreq'], None, 2, fir_design="firwin2")
     data_label2 = np.transpose(resample(data_label2, down=0.25*projected_erm_epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
-    corr_erm =np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
+    corr_erm =np.abs(np.array([distcorr_n(l1, l2) for l1, l2 in zip(data_label1, data_label2)]))
 
     stcs = mne.minimum_norm.apply_inverse_epochs(epochs, inv, lambda2, method, labels[index1], pick_ori="normal")
     data_label1 = np.abs(hilbert(np.array([stc.data for stc in stcs]), axis=2))
@@ -188,9 +205,9 @@ def compute_zdistcor_resample(projected_erm_epochs, epochs, labels, index1, inde
     data_label2 = filter_data(data_label2, epochs.info['sfreq'], None, 2, fir_design="firwin2")
     data_label2 = np.transpose(resample(data_label2, down=0.25*epochs.info['sfreq'], axis=2, npad='auto'), (0,2,1))[:,5:-5,:]
 
-    corr_rest = np.abs(np.array([distcorr(l1, l2, 0) for l1, l2 in zip(data_label1, data_label2)]))
+    corr_rest = np.abs(np.array([distcorr_n(l1, l2) for l1, l2 in zip(data_label1, data_label2)]))
 
-    return ttest_ind(corr_rest, corr_erm)[0]
+    return ranksums(corr_rest, corr_erm)[0]
 
 
 
@@ -226,7 +243,7 @@ def ParallelExecutor(use_bar='tqdm', **joblib_args):
     return aprun
 
 
-n_jobs = 235
+n_jobs = 350
 aprun = ParallelExecutor(n_jobs=n_jobs)
 corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
 
@@ -281,25 +298,23 @@ joblib.dump(data, pkl_fname)
 
 
 #
-pkl_fname = os.path.join(data_path, 'CC110033_lf_8_hf_11_labels_154_corr_z.pkl')
-x = joblib.load(pkl_fname)
-counter = x['counter']
-labels = x['labels']
-corr_z = x['corr_z']
-
-corr_zz =  np.zeros((len(labels), len(labels)))
-for index in range(len(counter)):
-    corr_zz[counter[index]] = corr_z[index]
-corr_zz = corr_zz + corr_zz.T
-corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
-deg = np.array(bct.degrees_und(corr))
-stc = get_stc(labels_fname, deg)
-# #
-brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-                  views=['lateral','medial'],
-                 surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
-
-
+# pkl_fname = os.path.join(data_path, 'CC110033_lf_8_hf_11_labels_154_corr_z.pkl')
+# x = joblib.load(pkl_fname)
+# counter = x['counter']
+# labels = x['labels']
+# corr_z = x['corr_z']
+#
+# corr_zz =  np.zeros((len(labels), len(labels)))
+# for index in range(len(counter)):
+#     corr_zz[counter[index]] = corr_z[index]
+# corr_zz = corr_zz + corr_zz.T
+# corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
+# deg = np.array(bct.degrees_und(corr))
+# stc = get_stc(labels_fname, deg)
+# # #
+# brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+#                   views=['lateral','medial'],
+#                  surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
 
 
 
