@@ -243,7 +243,7 @@ def ParallelExecutor(use_bar='tqdm', **joblib_args):
     return aprun
 
 
-n_jobs = 350
+n_jobs = 235
 aprun = ParallelExecutor(n_jobs=n_jobs)
 corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
 
