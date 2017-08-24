@@ -17,6 +17,7 @@ import os
 from scipy.spatial.distance import pdist, squareform
 from tqdm import tqdm
 import time
+import datetime
 from mne.filter import resample, filter_data
 from mne.label import read_labels_from_annot
 plt.ion()
@@ -262,26 +263,28 @@ corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_
 #
 data = {'corr_z': corr_z, 'labels':labels, 'counter':counter}
 
-pkl_fname = os.path.join(data_path,subject + '_lf_' + str(int(lf)) + '_hf_' + str(int(hf))+ '_labels_' + str(len(labels)) +'_corr_z.pkl')
+pkl_fname = os.path.join(data_path,subject + '_lf_' + str(int(lf)) + '_hf_' + str(int(hf))+
+                         '_labels_' + str(len(labels)) + '_timestamp_'+ '_'.join(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S").split(' '))
+ +'_corr_z.pkl')
 joblib.dump(data, pkl_fname)
 
 #
 #
 #
-# corr_zz =  np.zeros((len(labels), len(labels)))
-# for index in range(len(counter)):
-#         corr_zz[counter[index]] = corr_z[index]
-#
-#
-# corr_zz = corr_zz + corr_zz.T
-#
-# corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
-# deg = np.array(bct.degrees_und(corr))
-#
-# stc = get_stc(labels_fname, deg)
-# brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
-#                            views=['lateral','medial'],
-#                   surface='inflated10', subjects_dir=subjects_dir, clim={'kind':'value', 'lims':(5, 10, 25)})
+corr_zz =  np.zeros((len(labels), len(labels)))
+for index in range(len(counter)):
+        corr_zz[counter[index]] = corr_z[index]
+
+
+corr_zz = corr_zz + corr_zz.T
+
+corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
+deg = np.array(bct.degrees_und(corr))
+
+stc = get_stc(labels_fname, deg)
+brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
+                           views=['lateral','medial'],
+                  surface='inflated10', subjects_dir=subjects_dir)
 #
 # brain.save_image('beta_orthogonal_corr.png')
 
