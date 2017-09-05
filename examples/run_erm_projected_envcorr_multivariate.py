@@ -46,7 +46,7 @@ event_id = 1
 event_overlap = 8
 event_length = 30
 spacing='ico5'
-lf, hf = 14., 30.
+lf, hf = 3., 7.
 
 #def process_maxfilter(subject):
 raw_fname = op.join(
@@ -244,7 +244,7 @@ def ParallelExecutor(use_bar='tqdm', **joblib_args):
     return aprun
 
 
-n_jobs = 235
+n_jobs = 30
 aprun = ParallelExecutor(n_jobs=n_jobs)
 corr_z = aprun(total=len(counter))(delayed(compute_zdistcor_resample)(projected_erm_epochs, epochs, labels, index[0], index[1]) for index in counter)
 
@@ -275,7 +275,7 @@ corr_zz =  np.zeros((len(labels), len(labels)))
 for index in range(len(counter)):
         corr_zz[counter[index]] = corr_z[index]
 
-
+corr_zz[corr_zz<0] = 0
 corr_zz = corr_zz + corr_zz.T
 
 corr = np.int32(bct.utils.threshold_proportional(corr_zz,.15) > 0)
@@ -285,7 +285,7 @@ stc = get_stc(labels_fname, deg)
 brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap='gnuplot',
                            views=['lateral','medial'],
                   surface='inflated10', subjects_dir=subjects_dir)
-#
+# #
 # brain.save_image('beta_orthogonal_corr.png')
 
 
