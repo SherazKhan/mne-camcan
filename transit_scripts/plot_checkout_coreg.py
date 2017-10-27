@@ -6,6 +6,8 @@ import numpy as np
 from scipy.io import loadmat
 
 subject = 'CC110045'
+subjects_dir = op.expanduser(
+    '~/Dropbox/mne-camcan-data/recons')
 
 mat_name = op.expanduser(
     '~/Dropbox/mne-camcan-data/fiducials/{sub}/fiducials_{sub}.mat'.format(
@@ -180,20 +182,20 @@ def _read_talxfm(subject, subjects_dir, mode=None, verbose=None):
 
     mni_ras_t = invert_transform(ras_mni_t)
     ras_mri_t = invert_transform(mri_ras_t)
-    mni_mri_t = combine_transforms(mni_ras_t, ras_mri_t, FIFF.FIFFV_MNE_COORD_MNI_TAL, 'mri')
+    mni_mri_t = combine_transforms(
+        mni_ras_t, ras_mri_t, FIFF.FIFFV_MNE_COORD_MNI_TAL, 'mri')
     return mni_mri_t
 
 
 mne.io.constants.FIFF.FIFFV_COORD_MRI
-mri_mri_t = _read_talxfm(subject, subjects_dir=op.expanduser(
-    '~/Dropbox/mne-camcan-data/recons'))
+mni_mri_t = _read_talxfm(subject, subjects_dir=subjects_dir)
 
 
 # mri_mri_t = mne.transforms.invert_transform(mri_mri_t)
 # mne.transforms.combine_transforms(
 #     trans, trans_mni2ras, 'head', mne.io.constants.FIFF.FIFFV_COORD_MRI)
 
-fids = mne.transforms.apply_trans(mri_mri_t, mat['Mmm'] / 1000.)
+fids = mne.transforms.apply_trans(mni_mri_t, mat['Mmm'] / 1000.)
 
 fiducials = [{'coord_frame': 5,
               'ident': ident[ii], 'kind': 1, 'r': rr}
@@ -208,3 +210,6 @@ trans = mne.coreg.coregister_fiducials(info, fiducials)
 mne.write_trans(
     '/Users/dengeman/Dropbox/mne-camcan-data/rest/'
     'sub-%s/meg/fid-trans.fif' % subject, trans)
+
+
+mne.viz.plot_trans(info, trans=trans, subject=subject, subjects_dir=subjects_dir)
