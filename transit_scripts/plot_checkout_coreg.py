@@ -177,9 +177,14 @@ def _read_talxfm(subject, subjects_dir, mode=None, verbose=None):
     # # construct the MRI to MNI transform
     # mri_mni_t = combine_transforms(mri_ras_t, ras_mni_t, 'mri', 'mni_tal')
     # XXX figure out what is needed here.
-    return invert_transform(ras_mni_t)
+
+    mni_ras_t = invert_transform(ras_mni_t)
+    ras_mri_t = invert_transform(mri_ras_t)
+    mni_mri_t = combine_transforms(mni_ras_t, ras_mri_t, FIFF.FIFFV_MNE_COORD_MNI_TAL, 'mri')
+    return mni_mri_t
 
 
+mne.io.constants.FIFF.FIFFV_COORD_MRI
 mri_mri_t = _read_talxfm(subject, subjects_dir=op.expanduser(
     '~/Dropbox/mne-camcan-data/recons'))
 
