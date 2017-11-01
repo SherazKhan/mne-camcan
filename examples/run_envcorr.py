@@ -97,6 +97,9 @@ for index, label in enumerate(labels):
     labels_data[index] = data
     print(float(index) / len(labels) * 100)
 
+
+
+
 def compute_psd(labels_data, sfreq=300):
     n_labels, n_time, n_epochs = labels_data.shape
     labels_psd = np.zeros((n_labels, n_epochs, 1201))
@@ -115,6 +118,9 @@ def epochs_to_labels_mne(epochs, labels, inv, lambda2 = 1.0 / (3.0 ** 2), method
     labels_data = np.array(labels_data)
     labels_data = np.transpose(labels_data, (1, 2, 0))
     return labels_data
+
+
+
 
 
 labels_data = hilbert(labels_data, axis=1)

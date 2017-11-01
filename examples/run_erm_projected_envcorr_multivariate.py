@@ -333,7 +333,19 @@ brain = stc.plot(subject='fsaverageSK', time_viewer=True,hemi='split', colormap=
 
 
 
+def find_uncoupled_int(lst):
+    """
+    This funciton finds the unpaired integer in a list of integers 
+    >>> find_uncoupled_int([1, 2, 3, 1, 2])
+    3
+    """
+    unpaired = 0
 
+    for i in lst:
+        unpaired ^= i
+        print(unpaired)
+
+    return unpaired
 
 
 
