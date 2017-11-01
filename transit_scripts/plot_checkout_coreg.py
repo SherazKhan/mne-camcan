@@ -221,7 +221,7 @@ mne.viz.plot_trans(info, trans=trans, subject=subject, subjects_dir=subjects_dir
 from mne.transforms import get_ras_to_neuromag_trans
 from scipy.io import loadmat
 import os
-
+from scipy import linalg
 
 dat = loadmat('/autofs/cluster/fusion/Sheraz/data/camcan/camcan47/cc700/meg/pipeline/release004/fiducials/CC110033/fiducials_CC110033.mat')
 fud = np.hstack((dat['M'],np.ones((3,1))))
