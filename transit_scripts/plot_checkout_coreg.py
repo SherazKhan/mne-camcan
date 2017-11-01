@@ -1,16 +1,25 @@
 import os.path as op
-
 import mne
-
 import numpy as np
 from scipy.io import loadmat
+from mne.transforms import get_ras_to_neuromag_trans
+from scipy.io import loadmat
+import os
+from scipy import linalg
 
-subject = 'CC110045'
+subject = 'CC110033'
+
 subjects_dir = op.expanduser(
     '~/Dropbox/mne-camcan-data/recons')
 
 mat_name = op.expanduser(
     '~/Dropbox/mne-camcan-data/fiducials/{sub}/fiducials_{sub}.mat'.format(
+        sub=subject
+    ))
+
+
+mni152_trans_name = op.expanduser(
+    '~/Dropbox/mne-camcan-data/recons/{sub}/mri/transforms/reg.mni152.1mm.dat.fsl.mat'.format(
         sub=subject
     ))
 
@@ -40,9 +49,9 @@ ans =
 
 mat = loadmat(mat_name)
 
-ident = [mne.io.constants.FIFF.FIFFV_POINT_LPA,
-         mne.io.constants.FIFF.FIFFV_POINT_RPA,
-         mne.io.constants.FIFF.FIFFV_POINT_NASION]
+# ident = [mne.io.constants.FIFF.FIFFV_POINT_LPA,
+#          mne.io.constants.FIFF.FIFFV_POINT_RPA,
+#          mne.io.constants.FIFF.FIFFV_POINT_NASION]
 
 #
 # Xfm_mni2ras = np.array(
@@ -187,53 +196,53 @@ def _read_talxfm(subject, subjects_dir, mode=None, verbose=None):
     return mni_mri_t
 
 
-mne.io.constants.FIFF.FIFFV_COORD_MRI
-mni_mri_t = _read_talxfm(subject, subjects_dir=subjects_dir)
+fud = np.hstack((mat['M'], np.ones((3, 1))))
+
+
+# os.system('mni152reg --s %s --1' % subject)
+#
+trans = np.loadtxt(mni152_trans_name)
+
+
+trans2 = np.array([[-1,  0,  0, 128],
+                   [0,  0,  1,  -128],
+                   [0, -1,  0,  128],
+                   [0,  0,  0,  1]])
+
+
+trans = linalg.inv(
+    get_ras_to_neuromag_trans(
+        np.dot(trans2, np.dot(trans, fud[2]))[:3],
+        np.dot(trans2, np.dot(trans,fud[1]))[:3],
+               np.dot(trans2, np.dot(trans, fud[0]))[:3]))
+
+trans = mne.transforms.Transform(fro='head', to='mri', trans=trans)
+# mne.io.constants.FIFF.FIFFV_COORD_MRI
+# mni_mri_t = _read_talxfm(subject, subjects_dir=subjects_dir)
 
 
 # mri_mri_t = mne.transforms.invert_transform(mri_mri_t)
 # mne.transforms.combine_transforms(
 #     trans, trans_mni2ras, 'head', mne.io.constants.FIFF.FIFFV_COORD_MRI)
 
-fids = mne.transforms.apply_trans(mni_mri_t, mat['Mmm'] / 1000.)
-
-fiducials = [{'coord_frame': 5,
-              'ident': ident[ii], 'kind': 1, 'r': rr}
-             for ii, rr in enumerate(fids)]
-
+# fids = mne.transforms.apply_trans(mni_mri_t, mat['Mmm'] / 1000.)
+#
+# fiducials = [{'coord_frame': 5,
+#               'ident': ident[ii], 'kind': 1, 'r': rr}
+#              for ii, rr in enumerate(fids)]
+#
 info = mne.io.read_info(
     '/Users/dengeman/Dropbox/mne-camcan-data/'
     'rest/sub-%s/meg/rest_raw.fif' % subject)
-
-trans = mne.coreg.coregister_fiducials(info, fiducials)
-
-mne.write_trans(
-    '/Users/dengeman/Dropbox/mne-camcan-data/rest/'
-    'sub-%s/meg/fid-trans.fif' % subject, trans)
+#
+# trans = mne.coreg.coregister_fiducials(info, fiducials)
+#
+# mne.write_trans(
+#     '/Users/dengeman/Dropbox/mne-camcan-data/rest/'
+#     'sub-%s/meg/fid-trans.fif' % subject, trans)
 
 
 mne.viz.plot_trans(info, trans=trans, subject=subject, subjects_dir=subjects_dir)
 
 
 ##
-
-
-from mne.transforms import get_ras_to_neuromag_trans
-from scipy.io import loadmat
-import os
-from scipy import linalg
-import numpy as np
-
-dat = loadmat('/autofs/cluster/fusion/Sheraz/data/camcan/camcan47/cc700/meg/pipeline/release004/fiducials/CC110033/fiducials_CC110033.mat')
-fud = np.hstack((dat['M'],np.ones((3,1))))
-
-#os.system('mni152reg --s CC110033 --1')
-
-trans = np.loadtxt('/autofs/cluster/transcend/sheraz/Dropbox/mne-camcan-data/recons/CC110033/mri/transforms/reg.mni152.1mm.dat.fsl.mat')
-
-trans2 = np.array([[-1,  0,  0, 128],
-                    [0,  0,  1,  -128],
-                  [0, -1,  0,  128],
-                  [0,  0,  0,  1]])
-
-trans = linalg.inv(get_ras_to_neuromag_trans(np.dot(trans2, np.dot(trans,fud[2]))[:3], np.dot(trans2, np.dot(trans,fud[1]))[:3], np.dot(trans2, np.dot(trans,fud[0]))[:3]))
