@@ -227,7 +227,7 @@ import numpy as np
 dat = loadmat('/autofs/cluster/fusion/Sheraz/data/camcan/camcan47/cc700/meg/pipeline/release004/fiducials/CC110033/fiducials_CC110033.mat')
 fud = np.hstack((dat['M'],np.ones((3,1))))
 
-os.system('mni152reg --s CC110033 --1')
+#os.system('mni152reg --s CC110033 --1')
 
 trans = np.loadtxt('/autofs/cluster/transcend/sheraz/Dropbox/mne-camcan-data/recons/CC110033/mri/transforms/reg.mni152.1mm.dat.fsl.mat')
 
