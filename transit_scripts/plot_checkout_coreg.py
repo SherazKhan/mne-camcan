@@ -26,9 +26,9 @@ ident = [mne.io.constants.FIFF.FIFFV_POINT_LPA,
 
 mne.io.constants.FIFF.FIFFV_COORD_MRI
 
-fids = np.hstack((mat['Mmm'] / 1000, np.ones((3, 1))))[:, :3]
+fids = mat['Mmm'] / 1000
 
-trans152 = np.loadtxt(mni152_trans_name)
+# trans152 = np.loadtxt(mni152_trans_name)
 
 fiducials = [{'coord_frame': 5,
               'ident': ident[ii], 'kind': 1, 'r': rr}
@@ -39,6 +39,9 @@ info = mne.io.read_info(
     'rest/sub-%s/meg/rest_raw.fif' % subject)
 
 trans = mne.coreg.coregister_fiducials(info, fiducials)
+# trans = mne.read_trans('/Users/dengeman/Dropbox/mne-camcan-data/rest/sub-CC110033/meg/fid-trans_matti.fif')
+trans = mne.read_trans('/Users/dengeman/Dropbox/mne-camcan-data/rest/sub-CC110033/meg/fid-sk2-trans.fif' )
 mne.viz.plot_alignment(
     info, trans=trans, subject=subject,
+    dig=True,
     subjects_dir='/Users/dengeman/Dropbox/mne-camcan-data/recons')
