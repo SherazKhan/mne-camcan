@@ -1,6 +1,7 @@
 import os
 import os.path as op
 import mne
+from joblib import Parallel, delayed
 
 data_path = op.expanduser(
     '~/study_data/sk_de_labelsci2018/mne-camcan-data')
@@ -9,8 +10,8 @@ subjects_dir = op.join(data_path, 'recons')
 meg_dir = op.join(data_path, 'meg_dir')
 
 
-def run_make_anatomy(subject, subjects_dir, surface='white',
-                     spacing='oct6'):
+def _run_make_anatomy(subject, subjects_dir, surface='white',
+                      spacing='oct6'):
     src = mne.setup_source_space(
         subject=subject,
         spacing=spacing, surface=surface, subjects_dir=subjects_dir,
@@ -43,5 +44,8 @@ def run_make_anatomy(subject, subjects_dir, surface='white',
     mne.write_forward_solution(fname=fwd_name, fwd=fwd, overwrite=True)
 
 
-subject = 'CC110033'
-run_make_anatomy(subject=subject, subjects_dir=subjects_dir)
+subjects = ['CC110033', 'CC110037', 'CC110045']
+
+
+out = Parallel(n_jobs=8)(delayed(_run_make_anatomy)(
+    subject=subject, subjects_dir=subjects_dir) for subject in subjects)
