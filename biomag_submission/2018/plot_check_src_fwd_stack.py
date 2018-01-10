@@ -1,14 +1,14 @@
-import os
 import os.path as op
 import mne
 
-data_path = op.expanduser(
+inp_data_path = op.expanduser(
     '~/study_data/sk_de_labelsci2018/mne-camcan-data')
+out_data_path = op.expanduser(
+    '~/github/mne-camcan/biomag_submission/2018')
 
-
-subjects_dir = op.join(data_path, 'recons')
-meg_dir = op.join(data_path, 'meg_dir')
-out_dir = op.join(data_path, 'figures_qc') 
+subjects_dir = op.join(inp_data_path, 'recons')
+meg_dir = op.join(inp_data_path, 'meg_dir')
+out_dir = op.join(out_data_path, 'figures_qc')
 subject = 'CC110033'
 
 surface = 'white'
@@ -24,3 +24,5 @@ brain = mag_map.plot(
     smoothing_steps=2,
     clim=dict(kind='percent', lims=[1, 50, 99]))
 
+brain.save_montage(
+    op.join(out_dir, '{}-fwd-check.png'.format(subject)))
