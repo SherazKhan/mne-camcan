@@ -23,8 +23,8 @@ meg_dir = op.join(data_path, 'meg_dir')
 subjects = ['CC110033', 'CC110037', 'CC110045']
 
 
-def _regress_out_confounds(data_train, data_test, data_conf_train,
-                           data_conf_test,
+def _regress_out_confounds(data_fit, data_apply, data_conf_fit,
+                           data_conf_apply,
                            mode='multi',
                            estimator=None):
     if estimator is None:
@@ -34,18 +34,18 @@ def _regress_out_confounds(data_train, data_test, data_conf_train,
     else:
         est = clone(estimator)
 
-    Y_pred = np.empty(data_test.shape)
+    Y_pred = np.empty(data_apply.shape)
     if mode == 'single':
-        for ii in range(data_train.shape[0]):
-            est.fit(data_conf_train.T, data_train[ii])
-            Y_pred[ii] = est.predict(data_conf_test.T).ravel()
+        for ii in range(data_fit.shape[0]):
+            est.fit(data_conf_fit.T, data_fit[ii])
+            Y_pred[ii] = est.predict(data_conf_apply.T).ravel()
     elif mode == 'multi':
-        est.fit(data_conf_train.T, data_train.T)
-        Y_pred[:] = est.predict(data_conf_test.T).T
+        est.fit(data_conf_fit.T, data_fit.T)
+        Y_pred[:] = est.predict(data_conf_apply.T).T
     else:
         raise ValueError('Noo!')
 
-    data_clean = data_test - Y_pred
+    data_clean = data_apply - Y_pred
     return data_clean
 
 
@@ -57,49 +57,49 @@ def _regress_out_ecg_eog(raw, reject, decim=None, mode='epochs'):
                                eog=False, ecg=True)
     picks_eog = mne.pick_types(raw.info, meg=False,
                                eog=True, ecg=False)
-    data_test = raw.get_data().copy()
+    data_apply = raw.get_data().copy()
     if mode == 'epochs':
         if len(picks_eog) > 0:
-            data_train = mne.preprocessing.create_eog_epochs(
+            data_fit = mne.preprocessing.create_eog_epochs(
                 raw, reject=reject).get_data()
-            data_train = np.concatenate(data_train, axis=-1)
+            data_fit = np.concatenate(data_fit, axis=-1)
             data_clean = _regress_out_confounds(
-                data_conf_train=data_train[picks_eog][:, ::decim],
-                data_train=data_train[picks_meeg][:, ::decim],
-                data_conf_test=data_test[picks_eog],
-                data_test=data_test[picks_meeg],
+                data_conf_fit=data_fit[picks_eog][:, ::decim],
+                data_fit=data_fit[picks_meeg][:, ::decim],
+                data_conf_apply=data_apply[picks_eog],
+                data_apply=data_apply[picks_meeg],
                 estimator=None)
         else:
-            data_clean = data_test[picks_meeg]
+            data_clean = data_apply[picks_meeg]
 
         if len(picks_ecg) > 0:
-            data_train = mne.preprocessing.create_ecg_epochs(
+            data_fit = mne.preprocessing.create_ecg_epochs(
                 raw, reject=reject).filter(8, 16, picks=picks_ecg).get_data()
-            data_train = np.concatenate(data_train, axis=-1)
+            data_fit = np.concatenate(data_fit, axis=-1)
 
             data_clean = _regress_out_confounds(
-                data_conf_train=data_train[picks_ecg][:, ::decim],
-                data_train=data_train[picks_meeg][:, ::decim],
-                data_conf_test=data_test[picks_ecg],
-                data_test=data_clean,
+                data_conf_fit=data_fit[picks_ecg][:, ::decim],
+                data_fit=data_fit[picks_meeg][:, ::decim],
+                data_conf_apply=data_apply[picks_ecg],
+                data_apply=data_clean,
                 estimator=None)
 
     elif mode == 'raw':
         picks_conf = np.concatenate([picks_eog, picks_ecg], axis=0)
-        data_train, _ = _reject_data_segments(
-            data_test, reject=reject, flat=None, decim=decim, info=raw.info,
+        data_fit, _ = _reject_data_segments(
+            data_apply, reject=reject, flat=None, decim=decim, info=raw.info,
             tstep=2.)
 
         data_clean = _regress_out_confounds(
-            data_conf_train=data_train[picks_conf],
-            data_train=data_train[picks_meeg],
-            data_conf_test=data_test[picks_conf],
-            data_test=data_test[picks_meeg],
+            data_conf_fit=data_fit[picks_conf],
+            data_fit=data_fit[picks_meeg],
+            data_conf_apply=data_apply[picks_conf],
+            data_apply=data_apply[picks_meeg],
             estimator=None)
 
-    data_test[picks_meeg] = data_clean
+    data_apply[picks_meeg] = data_clean
     raw_clean = mne.io.RawArray(
-        data=data_test,
+        data=data_apply,
         info=raw.info.copy())
     return raw_clean
 
@@ -131,7 +131,7 @@ def _process_subject(subject):
     return subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after
 
 
-out = Parallel(n_jobs=3)(delayed(_process_subject)(
+out = Parallel(n_jobs=8)(delayed(_process_subject)(
     subject=subject) for subject in subjects)
 
 for subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after in out:
