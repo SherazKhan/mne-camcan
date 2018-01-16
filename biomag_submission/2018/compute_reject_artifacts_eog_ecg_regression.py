@@ -17,9 +17,8 @@ from autoreject import get_rejection_threshold
 data_path = op.expanduser(
     '~/study_data/sk_de_labelsci2018/mne-camcan-data')
 
-meg_inp_dir = op.join(data_path, 'task', )
 meg_dir = op.join(data_path, 'meg_dir')
-kinds = ['task', 'rest']
+kinds = ['rest', 'task']
 subjects = ['CC110033', 'CC110037', 'CC110045']
 
 
@@ -27,13 +26,10 @@ def _regress_out_confounds(data_fit, data_apply, data_conf_fit,
                            data_conf_apply,
                            mode='multi-output',
                            estimator=None):
-    from sklearn.svm import SVR
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.tree import DecisionTreeRegressor
     if estimator is None:
         est = make_pipeline(
-            StandardScaler(),
-            DecisionTreeRegressor())
+            RobustScaler(),
+            LinearRegression())
     else:
         est = clone(estimator)
 
@@ -52,7 +48,8 @@ def _regress_out_confounds(data_fit, data_apply, data_conf_fit,
     return data_clean
 
 
-def _regress_out_ecg_eog(raw, reject, decim=None, mode='epochs'):
+def _regress_out_ecg_eog(
+        raw, reject_eog=None, reject_ecg=None, decim=None, mode='epochs'):
     if 'ecg' not in raw and 'eog' not in raw:
         raise ValueError('There is neither EOG nor ECG.')
     picks_meeg = mne.pick_types(raw.info, meg=True, eeg=True)
@@ -64,38 +61,53 @@ def _regress_out_ecg_eog(raw, reject, decim=None, mode='epochs'):
     if mode == 'epochs':
         if len(picks_eog) > 0:
             data_fit = mne.preprocessing.create_eog_epochs(
-                raw, reject=reject).get_data()
+                raw, reject=reject_eog).get_data()
             print('Using %s eog epochs for fitting.' % len(data_fit))
-            data_fit = np.concatenate(data_fit, axis=-1)
-            data_clean = _regress_out_confounds(
-                data_conf_fit=data_fit[picks_eog][:, ::decim],
-                data_fit=data_fit[picks_meeg][:, ::decim],
-                data_conf_apply=data_apply[picks_eog],
-                data_apply=data_apply[picks_meeg],
-                estimator=None)
+            if len(data_fit) >= 5:
+                data_fit = np.concatenate(data_fit, axis=-1)
+                data_clean = _regress_out_confounds(
+                    data_conf_fit=data_fit[picks_eog][:, ::decim],
+                    data_fit=data_fit[picks_meeg][:, ::decim],
+                    data_conf_apply=data_apply[picks_eog],
+                    data_apply=data_apply[picks_meeg],
+                    estimator=None)
+            else:
+                data_clean = None
         else:
             data_clean = data_apply[picks_meeg]
 
         if len(picks_ecg) > 0:
             data_fit = (mne.preprocessing.create_ecg_epochs(
-                raw, reject=reject)
+                raw, reject=reject_ecg)
                 # .filter(8, 16, picks=picks_ecg)
                 .get_data())
             print('Using %s ecg epochs for fitting.' % len(data_fit))
-            data_fit = np.concatenate(data_fit, axis=-1)
+            if data_clean is None:
+                data_clean = data_apply[picks_meeg]
+            if len(data_fit) >= 5:
+                data_fit = np.concatenate(data_fit, axis=-1)
 
-            data_clean = _regress_out_confounds(
-                data_conf_fit=data_fit[picks_ecg][:, ::decim],
-                data_fit=data_fit[picks_meeg][:, ::decim],
-                data_conf_apply=data_apply[picks_ecg],
-                data_apply=data_clean,
-                estimator=None)
+                data_clean = _regress_out_confounds(
+                    data_conf_fit=data_fit[picks_ecg][:, ::decim],
+                    data_fit=data_fit[picks_meeg][:, ::decim],
+                    data_conf_apply=data_apply[picks_ecg],
+                    data_apply=data_clean,
+                    estimator=None)
+            else:
+                raise ValueError('Could not find sufficiently many samples to '
+                                 'preform EOG/ECG regression')
 
     elif mode == 'raw':
+        # XXX disambiguate correctly
         picks_conf = np.concatenate([picks_eog, picks_ecg], axis=0)
         data_fit, _ = _reject_data_segments(
-            data_apply, reject=reject, flat=None, decim=decim, info=raw.info,
-            tstep=2.)
+            data_apply, reject=reject_ecg, flat=None, decim=decim,
+            info=raw.info, tstep=2.)
+
+        if data_clean is None:
+            data_clean = data_apply
+        else:
+            data_apply = data_clean
 
         data_clean = _regress_out_confounds(
             data_conf_fit=data_fit[picks_conf],
@@ -112,43 +124,56 @@ def _regress_out_ecg_eog(raw, reject, decim=None, mode='epochs'):
 
 
 def _process_subject(subject, kind):
+    meg_inp_dir = op.join(data_path, kind)
     raw = mne.io.read_raw_fif(
         op.join(meg_inp_dir, '{}'.format(subject),
-                '{}_raw.fif'.format(kind)))
+                'mf2pt2_{}_raw.fif'.format(kind)))
 
     raw.load_data()
-    raw.filter(1, 100)
+    raw.filter(0.1, 100)
     raw.notch_filter(np.arange(50, 251, 50))
 
-    ave_ecg = mne.preprocessing.create_ecg_epochs(raw).average()
+    eog_epochs = mne.preprocessing.create_eog_epochs(raw)
+    if len(eog_epochs) >= 5:
+        reject_eog = get_rejection_threshold(eog_epochs)
+    else:
+        reject_eog = None
 
-    ave_eog = mne.preprocessing.create_eog_epochs(raw).average()
+    ecg_epochs = mne.preprocessing.create_ecg_epochs(raw)
+    if len(ecg_epochs) >= 5:
+        reject_ecg = get_rejection_threshold(ecg_epochs)
+    else:
+        reject_eog = None
 
-    reject = get_rejection_threshold(mne.preprocessing.create_eog_epochs(raw))
+    if reject_eog is None:
+        reject_eog = reject_ecg
+    if reject_ecg is None:
+        reject_ecg = reject_eog
 
-    raw_clean = _regress_out_ecg_eog(raw, reject=reject, decim=8)
+    raw_clean = _regress_out_ecg_eog(
+        raw, reject_eog=reject_eog, reject_ecg=reject_ecg, decim=8)
 
-    ave_eog = mne.preprocessing.create_eog_epochs(
-        raw, reject=reject).average()
+    ave_ecg = ecg_epochs.average()
+    ave_eog = eog_epochs.average()
+
     ave_eog_after = mne.preprocessing.create_eog_epochs(
-        raw_clean, reject=reject).average()
-    ave_ecg = mne.preprocessing.create_ecg_epochs(
-        raw, reject=reject).average()
+        raw_clean, reject=reject_eog).average()
     ave_ecg_after = mne.preprocessing.create_ecg_epochs(
-        raw_clean, reject=reject).average()
+        raw_clean, reject=reject_ecg).average()
+
+    return (subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after,
+            raw_clean, kind)
+
+
+out = Parallel(n_jobs=2)(delayed(_process_subject)(
+    subject=subject, kind=kind) for subject in subjects for kind in kinds)
+
+for (subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after,
+     raw_clean, kind) in out:
 
     raw_clean.save(
         op.join(data_path, 'meg_dir', subject, '{}-cln-raw.fif'.format(kind)),
         overwrite=True)
-    return (subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after,
-            raw_clean)
-
-
-out = Parallel(n_jobs=8)(delayed(_process_subject)(
-    subject=subject, kind=kind) for subject in subjects for kin in kinds)
-
-for (subject, ave_ecg, ave_ecg_after, ave_eog, ave_eog_after,
-     raw_clean) in out:
 
     plot_overlay_evoked(ave_eog, ave_eog_after, title='EOG', show=True)
     plt.suptitle('EOG artifact before (red) and after regression '
