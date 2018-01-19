@@ -11,6 +11,7 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 
 from utils import extract_label_time_course
+from liblib import Memory
 
 data_path = op.expanduser(
     '~/study_data/sk_de_labelsci2018/mne-camcan-data')
@@ -23,8 +24,9 @@ label_modes = ['mean_flip',
                'pca_flip_truncated']
 
 subjects_dir = op.join(data_path, 'subjects')
-N_JOBS = 8
+N_JOBS = 4
 DEBUG = False
+mem = Memory('./cache')
 
 
 def _label_morph(label, subject_to, subjects_dir):
@@ -88,7 +90,7 @@ def _initialize_data(subject, debug=False):
 
     return labels_map, label_props, src, fwd, inverse_operator
 
-
+@mem.cache
 def _get_label_outputs(
         stc, labels, label_modes, src, source_decim, n_comps, return_ts):
     scores = np.empty((len(label_modes), len(labels)))
@@ -142,7 +144,7 @@ def _run_label_properties(raw, labels, label_modes, inverse_operator,
     X_n_comps = np.empty((len(labels), len(windows)), dtype=np.float)
 
     X_r2 = np.empty(
-        (len(label_modes), len(labels)), dtype=np.float)
+        (len(label_modes), len(labels), len(windows)), dtype=np.float)
 
     if return_ts:
         X_stc = np.empty(
@@ -163,9 +165,9 @@ def _run_label_properties(raw, labels, label_modes, inverse_operator,
         start_target = int(start // source_decim)
         stop_target = int(stop // source_decim)
         X_n_comps[:, i_win] = np.concatenate(n_comps_, 0)
-        X_r2[..., i_win] = np.concatenate(scores, 0)
+        X_r2[..., i_win] = np.concatenate(scores, -1)
         if return_ts:
-            X_stc[..., start_target:stop_target] = np.concatenate(tc, 0)
+            X_stc[..., start_target:stop_target] = np.concatenate(tc, 1)
     return X_n_comps, X_r2, X_stc
 
 
@@ -176,7 +178,7 @@ def _run_experiment(subject):
     raw_fname = op.join(meg_dir, subject, '{}-sss-raw.fif'.format(kind))
     for fmin, fmax in ((None, None), (8, 12), (14, 30)):
         raw = mne.io.read_raw_fif(raw_fname, preload=True)
-        raw.crop(0.0, 5.)
+        raw.crop(0.0, 300.)
         decimate_raw(raw, 8)
         if fmin is not None and fmax is not None:
             raw.filter(
@@ -193,7 +195,7 @@ def _run_experiment(subject):
                 'fmin': fmin, 'fmax': fmax, 'label_type': label_type,
                 'subject': subject, 'data_type': 'rest',
                 'data': out, 'label_props': label_props}
-            write_hdf5(out_fname, result)
+            write_hdf5(out_fname, result, overwrite=True)
 
 
 for subject in subjects:
