@@ -41,6 +41,7 @@ def _process_subject(subject, kind):
     raw = mne.io.read_raw_fif(
         op.join(meg_inp_dir, '{}'.format(subject),
                 '{}_raw.fif'.format(kind)))
+
     if kind == 'emptyroom':
         kind_ = 'rest'
         coord_frame = 'meg'
